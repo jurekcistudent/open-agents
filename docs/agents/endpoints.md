@@ -49,11 +49,12 @@ Response:
   "header": "better-auth.session_token=<token>.<signature>",
   "token": "<token>",
   "expiresAt": "2026-05-21T15:30:00.000Z",
+  "expiresIn": 604800,
   "user": { "id": "__test_bot__", "username": "test-bot" }
 }
 ```
 
-The session lasts 1 hour. The bot user owns its own sessions, chats, and sandboxes — entirely separate from any real user's data.
+The session uses the configured Better Auth session lifetime. With the current app config, that is Better Auth's default of 7 days. The bot user owns its own sessions, chats, and sandboxes, entirely separate from any real user's data.
 
 ### Using the session in subsequent requests
 

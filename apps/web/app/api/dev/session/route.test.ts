@@ -75,6 +75,9 @@ mock.module("@/lib/auth/config", () => ({
         authCookies: {
           sessionToken: cookieConfig,
         },
+        sessionConfig: {
+          expiresIn: 60 * 60 * 24 * 7,
+        },
       });
     },
   },
@@ -226,6 +229,7 @@ describe("POST /api/dev/session", () => {
       header: string;
       token: string;
       expiresAt: string;
+      expiresIn: number;
       user: { id: string; username: string };
     };
 
@@ -234,6 +238,7 @@ describe("POST /api/dev/session", () => {
     expect(body.token).toMatch(/^[0-9a-f]{64}$/);
     expect(body.cookie.value.startsWith(`${body.token}.`)).toBe(true);
     expect(body.header).toBe(`${body.cookie.name}=${body.cookie.value}`);
+    expect(body.expiresIn).toBe(60 * 60 * 24 * 7);
     // Better Auth's cookie reader URL-decodes the value before verifying. The signature
     // is base64 (length 44, ends with "="), and "=" must be URL-encoded as "%3D"
     // in the cookie to match what Better Auth's own signCookieValue emits.
@@ -244,7 +249,7 @@ describe("POST /api/dev/session", () => {
     expect(setCookie).toContain(body.cookie.value);
     expect(setCookie).toContain("HttpOnly");
     expect(setCookie).toContain("SameSite=Lax");
-    expect(setCookie).toContain("Max-Age=3600");
+    expect(setCookie).toContain("Max-Age=604800");
     expect(setCookie).not.toContain("Secure");
 
     // Only the auth_sessions insert should happen (user already exists).
@@ -258,7 +263,7 @@ describe("POST /api/dev/session", () => {
     const ttl =
       (inserted.expiresAt as Date).getTime() -
       (inserted.createdAt as Date).getTime();
-    expect(ttl).toBe(60 * 60 * 1000);
+    expect(ttl).toBe(60 * 60 * 24 * 7 * 1000);
   });
 
   test("auto-creates the bot user on first call", async () => {

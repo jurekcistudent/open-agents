@@ -7,7 +7,6 @@ import { auth } from "@/lib/auth/config";
 import { db } from "@/lib/db/client";
 import { authSessions, users } from "@/lib/db/schema";
 
-const SESSION_TTL_MS = 60 * 60 * 1000;
 const MIN_SECRET_HEX_LENGTH = 64;
 
 // Fixed sentinel ID for the test bot user. Cannot collide with Better Auth's
@@ -128,10 +127,12 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const user = await ensureTestBotUser();
+  const ctx = await auth.$context;
+  const sessionMaxAgeSeconds = ctx.sessionConfig.expiresIn;
 
   const token = randomBytes(32).toString("hex");
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
+  const expiresAt = new Date(now.getTime() + sessionMaxAgeSeconds * 1000);
 
   await db.insert(authSessions).values({
     id: nanoid(),
@@ -142,7 +143,6 @@ export async function POST(req: NextRequest): Promise<Response> {
     updatedAt: now,
   });
 
-  const ctx = await auth.$context;
   const cookieName = ctx.authCookies.sessionToken.name;
   const cookieAttrs = ctx.authCookies.sessionToken.attributes;
   const signature = await makeSignature(token, ctx.secret);
@@ -157,7 +157,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     cookieName,
     encodedValue,
     cookieAttrs,
-    Math.floor(SESSION_TTL_MS / 1000),
+    sessionMaxAgeSeconds,
   );
 
   return new Response(
@@ -166,6 +166,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       header: `${cookieName}=${encodedValue}`,
       token,
       expiresAt: expiresAt.toISOString(),
+      expiresIn: sessionMaxAgeSeconds,
       user: { id: user.id, username: user.username },
     }),
     {
