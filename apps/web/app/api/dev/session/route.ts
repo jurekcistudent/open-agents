@@ -1,0 +1,165 @@
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import { makeSignature } from "better-auth/crypto";
+import { eq } from "drizzle-orm";
+import { nanoid } from "nanoid";
+import type { NextRequest } from "next/server";
+import { auth } from "@/lib/auth/config";
+import { db } from "@/lib/db/client";
+import { authSessions, users } from "@/lib/db/schema";
+
+const SESSION_TTL_MS = 60 * 60 * 1000;
+const MIN_SECRET_HEX_LENGTH = 64;
+
+// Fixed sentinel ID for the test bot user. Cannot collide with Better Auth's
+// nanoid-generated IDs (default size 21) because it is shorter and uses a
+// distinctive double-underscore pattern.
+const TEST_BOT_USER_ID = "__test_bot__";
+const TEST_BOT_USERNAME = "test-bot";
+
+function isProductionDeployment(): boolean {
+  if (process.env.VERCEL_ENV === "production") return true;
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.VERCEL_ENV === undefined &&
+    process.env.OPEN_AGENTS_ALLOW_TEST_AUTH !== "true"
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function getTestAuthSecret(): string | null {
+  const secret = process.env.TEST_AUTH_SECRET;
+  if (!secret || secret.length < MIN_SECRET_HEX_LENGTH) {
+    return null;
+  }
+  return secret;
+}
+
+function constantTimeStringEqual(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a, "utf8");
+  const bBuf = Buffer.from(b, "utf8");
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
+
+function jsonError(status: number, error: string): Response {
+  return new Response(JSON.stringify({ error }), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function buildSetCookieHeader(
+  name: string,
+  value: string,
+  attributes: { secure?: boolean; path?: string; sameSite?: string },
+  maxAgeSeconds: number,
+): string {
+  const sameSiteRaw = attributes.sameSite ?? "Lax";
+  const sameSite =
+    sameSiteRaw.charAt(0).toUpperCase() + sameSiteRaw.slice(1).toLowerCase();
+  const parts = [
+    `${name}=${value}`,
+    `Path=${attributes.path ?? "/"}`,
+    "HttpOnly",
+    `SameSite=${sameSite}`,
+    ...(attributes.secure ? ["Secure"] : []),
+    `Max-Age=${maxAgeSeconds}`,
+  ];
+  return parts.join("; ");
+}
+
+async function ensureTestBotUser(): Promise<{ id: string; username: string }> {
+  const existing = await db
+    .select({ id: users.id, username: users.username })
+    .from(users)
+    .where(eq(users.id, TEST_BOT_USER_ID))
+    .limit(1);
+
+  if (existing.length > 0) {
+    const row = existing[0];
+    if (!row) throw new Error("unreachable: existing row missing");
+    return row;
+  }
+
+  await db
+    .insert(users)
+    .values({
+      id: TEST_BOT_USER_ID,
+      username: TEST_BOT_USERNAME,
+      email: null,
+      emailVerified: false,
+      name: "Test Bot",
+      isAdmin: false,
+    })
+    .onConflictDoNothing();
+
+  return { id: TEST_BOT_USER_ID, username: TEST_BOT_USERNAME };
+}
+
+export async function POST(req: NextRequest): Promise<Response> {
+  if (isProductionDeployment()) {
+    return new Response(null, { status: 404 });
+  }
+
+  const expectedSecret = getTestAuthSecret();
+  if (!expectedSecret) {
+    return new Response(null, { status: 404 });
+  }
+
+  const providedSecret = req.headers.get("x-test-auth") ?? "";
+  if (!constantTimeStringEqual(providedSecret, expectedSecret)) {
+    return jsonError(401, "unauthorized");
+  }
+
+  const user = await ensureTestBotUser();
+
+  const token = randomBytes(32).toString("hex");
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
+
+  await db.insert(authSessions).values({
+    id: nanoid(),
+    token,
+    userId: user.id,
+    expiresAt,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const ctx = await auth.$context;
+  const cookieName = ctx.authCookies.sessionToken.name;
+  const cookieAttrs = ctx.authCookies.sessionToken.attributes;
+  const signature = await makeSignature(token, ctx.secret);
+  const rawSigned = `${token}.${signature}`;
+  const encodedValue = encodeURIComponent(rawSigned);
+
+  console.log(
+    `[dev/session] minted session for bot userId=${user.id} expiresAt=${expiresAt.toISOString()}`,
+  );
+
+  const setCookie = buildSetCookieHeader(
+    cookieName,
+    encodedValue,
+    cookieAttrs,
+    Math.floor(SESSION_TTL_MS / 1000),
+  );
+
+  return new Response(
+    JSON.stringify({
+      cookie: { name: cookieName, value: encodedValue },
+      header: `${cookieName}=${encodedValue}`,
+      token,
+      expiresAt: expiresAt.toISOString(),
+      user: { id: user.id, username: user.username },
+    }),
+    {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "set-cookie": setCookie,
+      },
+    },
+  );
+}
