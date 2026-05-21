@@ -95,6 +95,18 @@ Most routes follow the same conventions:
 
 ## Worked examples
 
+### Quick smoke test
+
+`scripts/test-agent.sh` runs the full happy path — mint a cookie, create a session, wait for the sandbox, send a message, and stream the response.
+
+```bash
+bash scripts/test-agent.sh                       # default prompt
+bash scripts/test-agent.sh "List the files in /vercel/sandbox"  # custom prompt
+BASE=http://localhost:3001 bash scripts/test-agent.sh           # different port
+```
+
+It prints the `sessionId` and `chatId` at the end so you can drive follow-up curls against the same chat.
+
 ### Create a session and send a message
 
 ```bash
