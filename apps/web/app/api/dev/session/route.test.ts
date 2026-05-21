@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { NextRequest } from "next/server";
 
-type UserRow = { id: string; username: string };
+type UserRow = { id: string; username: string; email: string | null };
 
 let existingBotUser: UserRow | undefined;
 const insertCalls: Array<{ table: unknown; values: Record<string, unknown> }> =
+  [];
+const updateCalls: Array<{ table: unknown; values: Record<string, unknown> }> =
   [];
 let conflictHandled = false;
 
@@ -33,6 +35,14 @@ mock.module("@/lib/db/client", () => ({
         };
         return promise;
       },
+    }),
+    update: (table: unknown) => ({
+      set: (values: Record<string, unknown>) => ({
+        where: async () => {
+          updateCalls.push({ table, values });
+          return undefined;
+        },
+      }),
     }),
   },
 }));
@@ -111,8 +121,13 @@ function createRequest(init: {
 
 describe("POST /api/dev/session", () => {
   beforeEach(() => {
-    existingBotUser = { id: "__test_bot__", username: "test-bot" };
+    existingBotUser = {
+      id: "__test_bot__",
+      username: "test-bot",
+      email: "test-bot@vercel.com",
+    };
     insertCalls.length = 0;
+    updateCalls.length = 0;
     conflictHandled = false;
     setEnv({
       VERCEL_ENV: "preview",
@@ -265,8 +280,36 @@ describe("POST /api/dev/session", () => {
     expect(insertCalls[0]?.table).toBe(usersTable);
     expect(insertCalls[0]?.values.id).toBe("__test_bot__");
     expect(insertCalls[0]?.values.username).toBe("test-bot");
+    expect(insertCalls[0]?.values.email).toBe("test-bot@vercel.com");
     expect(insertCalls[1]?.table).toBe(authSessionsTable);
     expect(insertCalls[1]?.values.userId).toBe("__test_bot__");
+  });
+
+  test("backfills the bot's email if it is missing on an existing row", async () => {
+    existingBotUser = {
+      id: "__test_bot__",
+      username: "test-bot",
+      email: null,
+    };
+    const { POST } = await routeModulePromise;
+    const res = await POST(
+      createRequest({ headers: { "x-test-auth": VALID_SECRET } }),
+    );
+    expect(res.status).toBe(200);
+    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls[0]?.table).toBe(usersTable);
+    expect(updateCalls[0]?.values.email).toBe("test-bot@vercel.com");
+    expect(updateCalls[0]?.values.emailVerified).toBe(true);
+  });
+
+  test("does not update when the bot's email already matches", async () => {
+    // existingBotUser is set in beforeEach with the correct email.
+    const { POST } = await routeModulePromise;
+    const res = await POST(
+      createRequest({ headers: { "x-test-auth": VALID_SECRET } }),
+    );
+    expect(res.status).toBe(200);
+    expect(updateCalls).toHaveLength(0);
   });
 
   test("ignores any handle in the request body", async () => {

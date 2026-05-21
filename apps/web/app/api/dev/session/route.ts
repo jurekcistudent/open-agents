@@ -15,6 +15,10 @@ const MIN_SECRET_HEX_LENGTH = 64;
 // distinctive double-underscore pattern.
 const TEST_BOT_USER_ID = "__test_bot__";
 const TEST_BOT_USERNAME = "test-bot";
+// A vercel.com email exempts the bot from the managed-template-trial gate
+// (`hasAllowedManagedTemplateEmail`) so it can create multiple sessions and
+// send unlimited messages while testing.
+const TEST_BOT_EMAIL = "test-bot@vercel.com";
 
 function isProductionDeployment(): boolean {
   if (process.env.VERCEL_ENV === "production") return true;
@@ -72,15 +76,25 @@ function buildSetCookieHeader(
 
 async function ensureTestBotUser(): Promise<{ id: string; username: string }> {
   const existing = await db
-    .select({ id: users.id, username: users.username })
+    .select({
+      id: users.id,
+      username: users.username,
+      email: users.email,
+    })
     .from(users)
     .where(eq(users.id, TEST_BOT_USER_ID))
     .limit(1);
 
-  if (existing.length > 0) {
-    const row = existing[0];
-    if (!row) throw new Error("unreachable: existing row missing");
-    return row;
+  const row = existing[0];
+  if (row) {
+    // Backfill the bot's email if it was created before this field was set.
+    if (row.email !== TEST_BOT_EMAIL) {
+      await db
+        .update(users)
+        .set({ email: TEST_BOT_EMAIL, emailVerified: true })
+        .where(eq(users.id, TEST_BOT_USER_ID));
+    }
+    return { id: row.id, username: row.username };
   }
 
   await db
@@ -88,8 +102,8 @@ async function ensureTestBotUser(): Promise<{ id: string; username: string }> {
     .values({
       id: TEST_BOT_USER_ID,
       username: TEST_BOT_USERNAME,
-      email: null,
-      emailVerified: false,
+      email: TEST_BOT_EMAIL,
+      emailVerified: true,
       name: "Test Bot",
       isAdmin: false,
     })
