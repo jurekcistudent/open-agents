@@ -32,7 +32,8 @@ function isProductionDeployment(): boolean {
 }
 
 function getTestAuthSecret(): string | null {
-  const secret = process.env.TEST_AUTH_SECRET;
+  const secret =
+    process.env.OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION;
   if (!secret || secret.length < MIN_SECRET_HEX_LENGTH) {
     return null;
   }

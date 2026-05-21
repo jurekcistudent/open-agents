@@ -89,7 +89,8 @@ const SHORT_SECRET = "a".repeat(32);
 const originalEnv = {
   VERCEL_ENV: process.env.VERCEL_ENV,
   NODE_ENV: process.env.NODE_ENV,
-  TEST_AUTH_SECRET: process.env.TEST_AUTH_SECRET,
+  OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION:
+    process.env.OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION,
   OPEN_AGENTS_ALLOW_TEST_AUTH: process.env.OPEN_AGENTS_ALLOW_TEST_AUTH,
 };
 
@@ -135,7 +136,7 @@ describe("POST /api/dev/session", () => {
     setEnv({
       VERCEL_ENV: "preview",
       NODE_ENV: "development",
-      TEST_AUTH_SECRET: VALID_SECRET,
+      OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION: VALID_SECRET,
       OPEN_AGENTS_ALLOW_TEST_AUTH: undefined,
     });
   });
@@ -176,8 +177,10 @@ describe("POST /api/dev/session", () => {
     expect(res.status).toBe(200);
   });
 
-  test("returns 404 when TEST_AUTH_SECRET is unset", async () => {
-    setEnv({ TEST_AUTH_SECRET: undefined });
+  test("returns 404 when the test auth secret is unset", async () => {
+    setEnv({
+      OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION: undefined,
+    });
     const { POST } = await routeModulePromise;
     const res = await POST(
       createRequest({ headers: { "x-test-auth": "anything" } }),
@@ -185,8 +188,10 @@ describe("POST /api/dev/session", () => {
     expect(res.status).toBe(404);
   });
 
-  test("returns 404 when TEST_AUTH_SECRET is shorter than 64 chars", async () => {
-    setEnv({ TEST_AUTH_SECRET: SHORT_SECRET });
+  test("returns 404 when the test auth secret is shorter than 64 chars", async () => {
+    setEnv({
+      OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION: SHORT_SECRET,
+    });
     const { POST } = await routeModulePromise;
     const res = await POST(
       createRequest({ headers: { "x-test-auth": SHORT_SECRET } }),

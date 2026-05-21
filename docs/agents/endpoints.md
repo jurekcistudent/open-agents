@@ -20,7 +20,7 @@ Set these in your local `.env` (or via Vercel preview env vars):
 
 ```bash
 # Generate with: openssl rand -hex 32
-TEST_AUTH_SECRET=...64+ hex characters...
+OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION=...64+ hex characters...
 
 # Only needed to enable in a local `next start` build (NODE_ENV=production
 # without VERCEL_ENV). Not needed for `next dev` or Vercel previews.
@@ -33,7 +33,7 @@ The endpoint is disabled on production deployments (`VERCEL_ENV=production`) reg
 
 ```bash
 curl -s -X POST http://localhost:3000/api/dev/session \
-  -H "X-Test-Auth: $TEST_AUTH_SECRET"
+  -H "X-Test-Auth: $OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION"
 ```
 
 No request body is needed. Any body sent is ignored.
@@ -61,7 +61,7 @@ The session uses the configured Better Auth session lifetime. With the current a
 ```bash
 # Stash the cookie header
 COOKIE=$(curl -s -X POST http://localhost:3000/api/dev/session \
-  -H "X-Test-Auth: $TEST_AUTH_SECRET" | jq -r .header)
+  -H "X-Test-Auth: $OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION" | jq -r .header)
 
 # Use it on any authenticated endpoint
 curl -s "http://localhost:3000/api/auth/info" -H "Cookie: $COOKIE"
@@ -71,7 +71,7 @@ curl -s "http://localhost:3000/api/auth/info" -H "Cookie: $COOKIE"
 
 - The endpoint can ONLY mint sessions for the dedicated bot user (id `__test_bot__`). Real users cannot be impersonated, by design.
 - 404 in production deployments (`VERCEL_ENV=production`).
-- 404 if `TEST_AUTH_SECRET` is unset or shorter than 64 hex characters.
+- 404 if `OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION` is unset or shorter than 64 hex characters.
 - 401 on a missing or wrong `X-Test-Auth` header (constant-time comparison).
 - The bot user id is a fixed sentinel (`__test_bot__`, 12 chars) that cannot collide with Better Auth's nanoid-generated user IDs (21 chars), so OAuth signups cannot become the bot.
 - Every successful mint is logged.
@@ -111,7 +111,7 @@ It prints the `sessionId` and `chatId` at the end so you can drive follow-up cur
 ### Create a session and send a message
 
 ```bash
-SECRET="$TEST_AUTH_SECRET"
+SECRET="$OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION"
 BASE="http://localhost:3000"
 
 # 1. Mint a session cookie (for the test bot user)

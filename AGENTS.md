@@ -17,7 +17,7 @@ Authentication uses [Better Auth](https://www.better-auth.com/) with Vercel OAut
 
 Key env vars: `BETTER_AUTH_SECRET` (session signing), `NEXT_PUBLIC_VERCEL_APP_CLIENT_ID` + `VERCEL_APP_CLIENT_SECRET` (Vercel OAuth), plus GitHub App credentials for repo access. See `apps/web/.env.example` for the full list.
 
-For testing without a browser, `POST /api/dev/session` mints a real session cookie for a given user handle. See [Testing the App via curl](docs/agents/endpoints.md) for the full flow.
+For testing without a browser, `POST /api/dev/session` mints a real session cookie for the dedicated test bot user. See [Testing the App via curl](docs/agents/endpoints.md) for the full flow.
 
 ## Database & Migrations
 

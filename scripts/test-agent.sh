@@ -15,7 +15,7 @@
 #
 # Requirements:
 #   - dev server running on $BASE (default http://localhost:3000)
-#   - TEST_AUTH_SECRET set in apps/web/.env.local (or exported in the shell)
+#   - OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION set in apps/web/.env.local (or exported in the shell)
 #   - VERCEL_OIDC_TOKEN valid in the dev server's environment
 #   - jq installed
 #
@@ -63,15 +63,15 @@ done
 
 PROMPT="${PROMPT:-Reply with just the digits: 42}"
 
-# Resolve TEST_AUTH_SECRET: prefer exported env, fall back to .env.local.
-if [ -z "${TEST_AUTH_SECRET:-}" ]; then
+# Resolve OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION: prefer exported env, fall back to .env.local.
+if [ -z "${OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION:-}" ]; then
   if [ -f apps/web/.env.local ]; then
-    TEST_AUTH_SECRET=$(grep -E '^TEST_AUTH_SECRET=' apps/web/.env.local | head -1 | sed -E 's/^TEST_AUTH_SECRET=//')
+    OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION=$(grep -E '^OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION=' apps/web/.env.local | head -1 | sed -E 's/^OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION=//')
   fi
 fi
 
-if [ -z "${TEST_AUTH_SECRET:-}" ]; then
-  echo "TEST_AUTH_SECRET is not set. Export it or add it to apps/web/.env.local." >&2
+if [ -z "${OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION:-}" ]; then
+  echo "OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION is not set. Export it or add it to apps/web/.env.local." >&2
   exit 1
 fi
 
@@ -81,7 +81,7 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 echo "1. Minting bot session cookie..."
-MINT=$(curl -s -X POST "$BASE/api/dev/session" -H "X-Test-Auth: $TEST_AUTH_SECRET")
+MINT=$(curl -s -X POST "$BASE/api/dev/session" -H "X-Test-Auth: $OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION")
 COOKIE=$(echo "$MINT" | jq -r .header)
 USER_ID=$(echo "$MINT" | jq -r .user.id)
 if [ -z "$COOKIE" ] || [ "$COOKIE" = "null" ]; then
