@@ -8,6 +8,7 @@ const insertCalls: Array<{ table: unknown; values: Record<string, unknown> }> =
   [];
 const updateCalls: Array<{ table: unknown; values: Record<string, unknown> }> =
   [];
+const deleteCalls: Array<{ table: unknown }> = [];
 let conflictHandled = false;
 
 mock.module("server-only", () => ({}));
@@ -43,6 +44,12 @@ mock.module("@/lib/db/client", () => ({
           return undefined;
         },
       }),
+    }),
+    delete: (table: unknown) => ({
+      where: async () => {
+        deleteCalls.push({ table });
+        return undefined;
+      },
     }),
   },
 }));
@@ -132,6 +139,7 @@ describe("POST /api/dev/session", () => {
     };
     insertCalls.length = 0;
     updateCalls.length = 0;
+    deleteCalls.length = 0;
     conflictHandled = false;
     setEnv({
       VERCEL_ENV: "preview",
@@ -153,6 +161,7 @@ describe("POST /api/dev/session", () => {
     );
     expect(res.status).toBe(404);
     expect(insertCalls).toHaveLength(0);
+    expect(deleteCalls).toHaveLength(0);
   });
 
   test("returns 404 in local production builds without ALLOW_TEST_AUTH", async () => {
@@ -256,6 +265,9 @@ describe("POST /api/dev/session", () => {
     expect(setCookie).toContain("SameSite=Lax");
     expect(setCookie).toContain("Max-Age=604800");
     expect(setCookie).not.toContain("Secure");
+
+    expect(deleteCalls).toHaveLength(1);
+    expect(deleteCalls[0]?.table).toBe(authSessionsTable);
 
     // Only the auth_sessions insert should happen (user already exists).
     expect(insertCalls).toHaveLength(1);

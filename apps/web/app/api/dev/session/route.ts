@@ -135,6 +135,8 @@ export async function POST(req: NextRequest): Promise<Response> {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + sessionMaxAgeSeconds * 1000);
 
+  await db.delete(authSessions).where(eq(authSessions.userId, user.id));
+
   await db.insert(authSessions).values({
     id: nanoid(),
     token,
