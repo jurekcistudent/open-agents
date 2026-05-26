@@ -19,15 +19,14 @@ The endpoint cannot impersonate real users. It only ever mints a session for a s
 Set these in your local `.env` (or via Vercel preview env vars):
 
 ```bash
+# Explicitly enables the endpoint for local or preview testing.
+OPEN_AGENTS_ALLOW_TEST_AUTH_DO_NOT_SET_IN_PRODUCTION=true
+
 # Generate with: openssl rand -hex 32
 OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION=...64+ hex characters...
-
-# Only needed to enable in a local `next start` build (NODE_ENV=production
-# without VERCEL_ENV). Not needed for `next dev` or Vercel previews.
-OPEN_AGENTS_ALLOW_TEST_AUTH=true
 ```
 
-The endpoint is disabled on production deployments (`VERCEL_ENV=production`) regardless of these vars.
+Do not set either value in production on any host. The endpoint is also disabled on production deployments (`VERCEL_ENV=production`) regardless of these vars.
 
 ### Minting a session
 
@@ -71,6 +70,7 @@ curl -s "http://localhost:3000/api/auth/info" -H "Cookie: $COOKIE"
 
 - The endpoint can ONLY mint sessions for the dedicated bot user (id `__test_bot__`). Real users cannot be impersonated, by design.
 - 404 in production deployments (`VERCEL_ENV=production`).
+- 404 if `OPEN_AGENTS_ALLOW_TEST_AUTH_DO_NOT_SET_IN_PRODUCTION` is not exactly `true`.
 - 404 if `OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION` is unset or shorter than 64 hex characters.
 - 401 on a missing or wrong `X-Test-Auth` header (constant-time comparison).
 - The bot user id is a fixed sentinel (`__test_bot__`, 12 chars) that cannot collide with Better Auth's nanoid-generated user IDs (21 chars), so OAuth signups cannot become the bot.

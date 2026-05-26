@@ -98,7 +98,8 @@ const originalEnv = {
   NODE_ENV: process.env.NODE_ENV,
   OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION:
     process.env.OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION,
-  OPEN_AGENTS_ALLOW_TEST_AUTH: process.env.OPEN_AGENTS_ALLOW_TEST_AUTH,
+  OPEN_AGENTS_ALLOW_TEST_AUTH_DO_NOT_SET_IN_PRODUCTION:
+    process.env.OPEN_AGENTS_ALLOW_TEST_AUTH_DO_NOT_SET_IN_PRODUCTION,
 };
 
 function setEnv(values: Partial<typeof originalEnv>): void {
@@ -145,7 +146,7 @@ describe("POST /api/dev/session", () => {
       VERCEL_ENV: "preview",
       NODE_ENV: "development",
       OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION: VALID_SECRET,
-      OPEN_AGENTS_ALLOW_TEST_AUTH: undefined,
+      OPEN_AGENTS_ALLOW_TEST_AUTH_DO_NOT_SET_IN_PRODUCTION: "true",
     });
   });
 
@@ -165,7 +166,11 @@ describe("POST /api/dev/session", () => {
   });
 
   test("returns 404 in local production builds without ALLOW_TEST_AUTH", async () => {
-    setEnv({ VERCEL_ENV: undefined, NODE_ENV: "production" });
+    setEnv({
+      VERCEL_ENV: undefined,
+      NODE_ENV: "production",
+      OPEN_AGENTS_ALLOW_TEST_AUTH_DO_NOT_SET_IN_PRODUCTION: undefined,
+    });
     const { POST } = await routeModulePromise;
     const res = await POST(
       createRequest({ headers: { "x-test-auth": VALID_SECRET } }),
@@ -177,7 +182,7 @@ describe("POST /api/dev/session", () => {
     setEnv({
       VERCEL_ENV: undefined,
       NODE_ENV: "production",
-      OPEN_AGENTS_ALLOW_TEST_AUTH: "true",
+      OPEN_AGENTS_ALLOW_TEST_AUTH_DO_NOT_SET_IN_PRODUCTION: "true",
     });
     const { POST } = await routeModulePromise;
     const res = await POST(
@@ -193,6 +198,17 @@ describe("POST /api/dev/session", () => {
     const { POST } = await routeModulePromise;
     const res = await POST(
       createRequest({ headers: { "x-test-auth": "anything" } }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  test("returns 404 when explicit test auth opt-in is unset", async () => {
+    setEnv({
+      OPEN_AGENTS_ALLOW_TEST_AUTH_DO_NOT_SET_IN_PRODUCTION: undefined,
+    });
+    const { POST } = await routeModulePromise;
+    const res = await POST(
+      createRequest({ headers: { "x-test-auth": VALID_SECRET } }),
     );
     expect(res.status).toBe(404);
   });

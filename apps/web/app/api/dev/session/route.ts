@@ -24,11 +24,17 @@ function isProductionDeployment(): boolean {
   if (
     process.env.NODE_ENV === "production" &&
     process.env.VERCEL_ENV === undefined &&
-    process.env.OPEN_AGENTS_ALLOW_TEST_AUTH !== "true"
+    process.env.OPEN_AGENTS_ALLOW_TEST_AUTH_DO_NOT_SET_IN_PRODUCTION !== "true"
   ) {
     return true;
   }
   return false;
+}
+
+function isTestAuthEnabled(): boolean {
+  return (
+    process.env.OPEN_AGENTS_ALLOW_TEST_AUTH_DO_NOT_SET_IN_PRODUCTION === "true"
+  );
 }
 
 function getTestAuthSecret(): string | null {
@@ -114,6 +120,10 @@ async function ensureTestBotUser(): Promise<{ id: string; username: string }> {
 
 export async function POST(req: NextRequest): Promise<Response> {
   if (isProductionDeployment()) {
+    return new Response(null, { status: 404 });
+  }
+
+  if (!isTestAuthEnabled()) {
     return new Response(null, { status: 404 });
   }
 

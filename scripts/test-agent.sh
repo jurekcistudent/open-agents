@@ -15,6 +15,7 @@
 #
 # Requirements:
 #   - dev server running on $BASE (default http://localhost:3000)
+#   - OPEN_AGENTS_ALLOW_TEST_AUTH_DO_NOT_SET_IN_PRODUCTION=true set in the dev server's environment
 #   - OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION set in apps/web/.env.local (or exported in the shell)
 #   - VERCEL_OIDC_TOKEN valid in the dev server's environment
 #   - jq installed
@@ -63,11 +64,22 @@ done
 
 PROMPT="${PROMPT:-Reply with just the digits: 42}"
 
-# Resolve OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION: prefer exported env, fall back to .env.local.
+# Resolve dev-only test auth vars: prefer exported env, fall back to .env.local.
+if [ -z "${OPEN_AGENTS_ALLOW_TEST_AUTH_DO_NOT_SET_IN_PRODUCTION:-}" ]; then
+  if [ -f apps/web/.env.local ]; then
+    OPEN_AGENTS_ALLOW_TEST_AUTH_DO_NOT_SET_IN_PRODUCTION=$(grep -E '^OPEN_AGENTS_ALLOW_TEST_AUTH_DO_NOT_SET_IN_PRODUCTION=' apps/web/.env.local | head -1 | sed -E 's/^OPEN_AGENTS_ALLOW_TEST_AUTH_DO_NOT_SET_IN_PRODUCTION=//')
+  fi
+fi
+
 if [ -z "${OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION:-}" ]; then
   if [ -f apps/web/.env.local ]; then
     OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION=$(grep -E '^OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION=' apps/web/.env.local | head -1 | sed -E 's/^OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION=//')
   fi
+fi
+
+if [ "${OPEN_AGENTS_ALLOW_TEST_AUTH_DO_NOT_SET_IN_PRODUCTION:-}" != "true" ]; then
+  echo "OPEN_AGENTS_ALLOW_TEST_AUTH_DO_NOT_SET_IN_PRODUCTION must be set to true in the dev server environment." >&2
+  exit 1
 fi
 
 if [ -z "${OPEN_AGENTS_TEST_AUTH_SECRET_DO_NOT_SET_IN_PRODUCTION:-}" ]; then
