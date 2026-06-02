@@ -120,6 +120,8 @@ ELEVENLABS_API_KEY=
    https://YOUR_DOMAIN/api/auth/callback/vercel
    ```
 
+   Enable the `openid`, `email`, `profile`, and `offline_access` scopes on the OAuth app.
+
 7. Add these env vars and redeploy:
 
    ```env
@@ -181,6 +183,8 @@ For local development, use:
 http://localhost:3000/api/auth/callback/vercel
 ```
 
+Make sure the OAuth app has the following scopes enabled: `openid`, `email`, `profile`, and `offline_access`.
+
 Then set:
 
 ```env
@@ -200,6 +204,21 @@ Create a GitHub App for installation-based repo access and configure:
 - make the app public if you want org installs to work cleanly
 
 For local development, use `http://localhost:3000` as the homepage URL, `http://localhost:3000/api/auth/callback/github` as the callback URL, and `http://localhost:3000/api/github/app/callback` as the setup URL.
+
+#### Repository permissions
+
+Under **Permissions & events → Repository permissions**, enable the following. These are derived from the GitHub API calls the app actually makes:
+
+| Permission       | Level                       | Used by                                                                                   |
+| ---------------- | --------------------------- | ----------------------------------------------------------------------------------------- |
+| Contents         | Read and write              | committing changes — `git.createBlob`/`createTree`/`createCommit`/`createRef`/`updateRef`/`deleteRef` |
+| Pull requests    | Read and write              | `pulls.create`/`update`/`merge`/`list`/`get`                                               |
+| Metadata         | Read-only (mandatory)       | `repos.get`                                                                                |
+| Commit statuses  | Read-only                   | `repos.getCombinedStatusForRef`                                                            |
+| Checks           | Read-only                   | `checks.listForRef`                                                                        |
+| Issues           | Read-only                   | `issues.listComments` (PR conversation comments)                                           |
+| Administration   | Read-only                   | `repos.getStatusChecksProtection` (branch protection)                                      |
+| Workflows        | Read and write (recommended) | the agent can edit any file; pushes touching `.github/workflows/*` are rejected without this |
 
 Then set:
 
