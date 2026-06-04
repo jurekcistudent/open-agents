@@ -1,4 +1,8 @@
-import { Sandbox as VercelSandboxSDK } from "@vercel/sandbox";
+import {
+  type Command,
+  type NetworkPolicy,
+  Sandbox as VercelSandboxSDK,
+} from "@vercel/sandbox";
 import type { Dirent } from "fs";
 import type {
   ExecResult,
@@ -22,6 +26,56 @@ const MAX_PROACTIVE_TIMEOUT_MS = MAX_SDK_TIMEOUT_MS - TIMEOUT_BUFFER_MS;
 const DEFAULT_RECONNECT_TIMEOUT_MS = 300_000; // 5 minutes default timeout for reconnected sandboxes
 const DETACHED_QUICK_FAILURE_WINDOW_MS = 2_000;
 
+export interface AgentHarnessCommandSpec {
+  cmd: string;
+  args?: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+  sudo?: boolean;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
+export interface AgentHarnessExecResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+}
+
+export interface AgentHarnessProcess {
+  logs(): AsyncIterable<{ stream: "stdout" | "stderr"; data: string }>;
+  wait(): Promise<AgentHarnessExecResult>;
+  kill(): Promise<void>;
+}
+
+export interface AgentHarnessNetworkPolicy {
+  mode: "allow-all" | "deny-all" | "custom";
+  allowedHosts?: string[];
+  allowedCIDRs?: string[];
+  deniedCIDRs?: string[];
+  injectedHeaders?: Array<{
+    domain: string;
+    headers: Record<string, string>;
+  }>;
+}
+
+export interface AgentHarnessHostedWorkspace {
+  readonly name: string;
+  exec(spec: AgentHarnessCommandSpec): Promise<AgentHarnessExecResult>;
+  spawn(spec: AgentHarnessCommandSpec): Promise<AgentHarnessProcess>;
+  writeFiles(
+    files: Array<{ path: string; content: string | Uint8Array }>,
+    opts?: { signal?: AbortSignal },
+  ): Promise<void>;
+  readFileToBuffer(options: { path: string }): Promise<Buffer | null>;
+  getPortUrl(port: number, protocol?: "http" | "ws"): Promise<string>;
+  updateNetworkPolicy(
+    policy: AgentHarnessNetworkPolicy | undefined,
+  ): Promise<void>;
+  stop(): Promise<void>;
+  delete(): Promise<void>;
+}
+
 interface SandboxRouteLike {
   port: number;
 }
@@ -43,6 +97,83 @@ const DEFAULT_NETWORK_POLICY: SandboxNetworkPolicy = {
     "*": [],
   },
 };
+
+function toAgentHarnessNetworkPolicy(
+  policy: AgentHarnessNetworkPolicy | undefined,
+): NetworkPolicy | undefined {
+  if (!policy) {
+    return undefined;
+  }
+
+  if (policy.mode === "deny-all") {
+    return policy.mode;
+  }
+
+  const allow: Record<
+    string,
+    Array<{ transform?: Array<{ headers?: Record<string, string> }> }>
+  > = {};
+
+  if (policy.mode === "allow-all") {
+    allow["*"] = [];
+  }
+
+  for (const host of policy.allowedHosts ?? []) {
+    allow[host] = [];
+  }
+
+  for (const rule of policy.injectedHeaders ?? []) {
+    allow[rule.domain] ??= [];
+    allow[rule.domain]?.push({
+      transform: [{ headers: { ...rule.headers } }],
+    });
+  }
+
+  if (
+    policy.mode === "allow-all" &&
+    Object.keys(allow).length === 1 &&
+    allow["*"]?.length === 0 &&
+    !policy.allowedCIDRs?.length &&
+    !policy.deniedCIDRs?.length
+  ) {
+    return "allow-all";
+  }
+
+  return {
+    ...(Object.keys(allow).length > 0 ? { allow } : {}),
+    ...((policy.allowedCIDRs?.length ?? 0) > 0 ||
+    (policy.deniedCIDRs?.length ?? 0) > 0
+      ? {
+          subnets: {
+            ...(policy.allowedCIDRs?.length
+              ? { allow: [...policy.allowedCIDRs] }
+              : {}),
+            ...(policy.deniedCIDRs?.length
+              ? { deny: [...policy.deniedCIDRs] }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+function toAgentHarnessCommandParams(
+  spec: AgentHarnessCommandSpec,
+  detached?: boolean,
+) {
+  const { timeoutMs: _timeoutMs, ...params } = spec;
+  return detached ? { ...params, detached: true as const } : params;
+}
+
+async function toAgentHarnessExecResult(
+  command: Pick<Command, "stdout" | "stderr" | "exitCode">,
+): Promise<AgentHarnessExecResult> {
+  return {
+    stdout: await command.stdout(),
+    stderr: await command.stderr(),
+    exitCode: command.exitCode,
+  };
+}
 
 function buildGitHubCredentialBrokeringPolicy(
   token?: string,
@@ -1019,6 +1150,76 @@ ${hostLine}${portLines}${runtimeEnvLine}`;
    */
   domain(port: number): string {
     return this.session.domain(port);
+  }
+
+  /**
+   * Adapt this caller-owned sandbox for agent-harness-sdk provided mode.
+   * The harness may detach its bridge processes, but Open Agents retains
+   * lifecycle ownership of the underlying sandbox.
+   */
+  toAgentHarnessWorkspace(): AgentHarnessHostedWorkspace {
+    return {
+      name: this.name,
+      exec: async (spec) => {
+        return await toAgentHarnessExecResult(
+          await this.session.runCommand(toAgentHarnessCommandParams(spec)),
+        );
+      },
+      spawn: async (spec) => {
+        const command = await this.session.runCommand(
+          toAgentHarnessCommandParams(spec, true),
+        );
+        return {
+          async *logs() {
+            for await (const entry of command.logs()) {
+              yield entry;
+            }
+          },
+          async wait() {
+            return await toAgentHarnessExecResult(await command.wait());
+          },
+          async kill() {
+            await command.kill();
+          },
+        };
+      },
+      writeFiles: async (files, opts) => {
+        await this.session.writeFiles(
+          files.map((file) => ({
+            path: file.path,
+            content: Buffer.from(file.content),
+          })),
+          opts,
+        );
+      },
+      readFileToBuffer: async (options) => {
+        return await this.session.readFileToBuffer(options);
+      },
+      getPortUrl: async (port, protocol = "http") => {
+        const url = new URL(this.session.domain(port));
+        url.protocol =
+          protocol === "ws"
+            ? url.protocol === "https:"
+              ? "wss:"
+              : "ws:"
+            : url.protocol === "wss:" || url.protocol === "https:"
+              ? "https:"
+              : "http:";
+        return url.toString();
+      },
+      updateNetworkPolicy: async (policy) => {
+        const networkPolicy = toAgentHarnessNetworkPolicy(policy);
+        if (networkPolicy) {
+          await this.sdk.updateNetworkPolicy(networkPolicy);
+        }
+      },
+      stop: async () => {
+        await this.stop();
+      },
+      delete: async () => {
+        await this.sdk.delete();
+      },
+    };
   }
 
   async setGitHubAuthToken(token?: string): Promise<void> {

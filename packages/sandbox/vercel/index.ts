@@ -1,5 +1,12 @@
 export { VercelSandbox, connectVercelSandbox } from "./sandbox.ts";
 export type {
+  AgentHarnessCommandSpec,
+  AgentHarnessExecResult,
+  AgentHarnessHostedWorkspace,
+  AgentHarnessNetworkPolicy,
+  AgentHarnessProcess,
+} from "./sandbox.ts";
+export type {
   VercelSandboxConfig,
   VercelSandboxConnectConfig,
 } from "./config.ts";

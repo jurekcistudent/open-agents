@@ -8,17 +8,20 @@ type MockWaitResult = {
   stderr: () => Promise<string>;
 };
 type MockRunCommandResult = {
-  exitCode?: number;
+  exitCode?: number | null;
   cmdId: string;
   stdout: () => Promise<string>;
   stderr: () => Promise<string>;
   wait?: (params?: { signal?: AbortSignal }) => Promise<MockWaitResult>;
+  logs?: () => AsyncIterable<{ stream: "stdout" | "stderr"; data: string }>;
+  kill?: () => Promise<void>;
 };
 type MockRunCommandParams = {
   cmd?: string;
   args?: string[];
   cwd?: string;
   env?: Record<string, string>;
+  detached?: boolean;
 };
 
 type MockSessionState = {
@@ -38,6 +41,7 @@ type MockSessionState = {
 const createCalls: Array<Record<string, unknown>> = [];
 const getCalls: Array<Record<string, unknown>> = [];
 const updateNetworkPolicyCalls: Array<Record<string, unknown>> = [];
+const deleteCalls: string[] = [];
 const runCommandCalls: MockRunCommandParams[] = [];
 const writeFilesCalls: Array<{ path: string; content: Buffer }[]> = [];
 let readFileToBufferResult: Buffer | null = Buffer.from("");
@@ -128,6 +132,9 @@ function createMockSandboxSdk(name: string) {
       return readFileToBufferResult;
     },
     stop: async () => {},
+    delete: async () => {
+      deleteCalls.push(name);
+    },
   };
 }
 
@@ -158,6 +165,7 @@ beforeEach(() => {
   createCalls.length = 0;
   getCalls.length = 0;
   updateNetworkPolicyCalls.length = 0;
+  deleteCalls.length = 0;
   runCommandCalls.length = 0;
   writeFilesCalls.length = 0;
   readFileToBufferResult = Buffer.from("");
@@ -278,6 +286,110 @@ describe("VercelSandbox.exec", () => {
       stderr: "fatal: couldn't find remote ref feature\n",
       truncated: false,
     });
+  });
+});
+
+describe("VercelSandbox.toAgentHarnessWorkspace", () => {
+  test("adapts the caller-owned sandbox to the hosted harness workspace surface", async () => {
+    let killed = false;
+    runCommandMock = async (params) => ({
+      exitCode: params?.detached ? null : 0,
+      cmdId: params?.detached ? "cmd-bridge" : "cmd-bounded",
+      stdout: async () => (params?.detached ? "bridge complete" : "bounded"),
+      stderr: async () => "",
+      wait: async () => ({
+        exitCode: 0,
+        stdout: async () => "bridge complete",
+        stderr: async () => "",
+      }),
+      logs: async function* () {
+        yield { stream: "stdout", data: "bridge ready" };
+      },
+      kill: async () => {
+        killed = true;
+      },
+    });
+    readFileToBufferResult = Buffer.from("stored bridge");
+    portDomains.set(5001, "https://sbx-5001.vercel.run");
+
+    const sandbox = await sandboxModule.VercelSandbox.connect("session_123", {
+      ports: [5001],
+      remainingTimeout: 0,
+    });
+    const workspace = sandbox.toAgentHarnessWorkspace();
+
+    await expect(
+      workspace.exec({
+        cmd: "bash",
+        args: ["-c", "echo bounded"],
+        timeoutMs: 5_000,
+      }),
+    ).resolves.toEqual({
+      stdout: "bounded",
+      stderr: "",
+      exitCode: 0,
+    });
+    await workspace.writeFiles([
+      { path: "/tmp/bridge.mts", content: "console.log('bridge')" },
+    ]);
+    await expect(
+      workspace.readFileToBuffer({ path: "/tmp/bridge.mts" }),
+    ).resolves.toEqual(Buffer.from("stored bridge"));
+    await expect(workspace.getPortUrl(5001, "ws")).resolves.toBe(
+      "wss://sbx-5001.vercel.run/",
+    );
+    await workspace.updateNetworkPolicy({
+      mode: "custom",
+      allowedHosts: ["ai-gateway.vercel.sh"],
+      injectedHeaders: [
+        {
+          domain: "ai-gateway.vercel.sh",
+          headers: { authorization: "Bearer test-key" },
+        },
+      ],
+    });
+
+    const process = await workspace.spawn({
+      cmd: "node",
+      args: ["/tmp/bridge.mts"],
+    });
+    const logs: Array<{ stream: "stdout" | "stderr"; data: string }> = [];
+    for await (const entry of process.logs()) {
+      logs.push(entry);
+    }
+    await expect(process.wait()).resolves.toEqual({
+      stdout: "bridge complete",
+      stderr: "",
+      exitCode: 0,
+    });
+    await process.kill();
+
+    expect(runCommandCalls).toContainEqual({
+      cmd: "bash",
+      args: ["-c", "echo bounded"],
+    });
+    expect(runCommandCalls).toContainEqual({
+      cmd: "node",
+      args: ["/tmp/bridge.mts"],
+      detached: true,
+    });
+    expect(writeFilesCalls).toContainEqual([
+      {
+        path: "/tmp/bridge.mts",
+        content: Buffer.from("console.log('bridge')"),
+      },
+    ]);
+    expect(updateNetworkPolicyCalls.at(-1)).toEqual({
+      allow: {
+        "ai-gateway.vercel.sh": [
+          {
+            transform: [{ headers: { authorization: "Bearer test-key" } }],
+          },
+        ],
+      },
+    });
+    expect(logs).toEqual([{ stream: "stdout", data: "bridge ready" }]);
+    expect(killed).toBe(true);
   });
 });
 

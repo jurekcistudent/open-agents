@@ -4,7 +4,10 @@ import {
   requireAuthenticatedUser,
   requireOwnedSessionWithSandboxGuard,
 } from "@/app/api/sessions/_lib/session-context";
-import { DEFAULT_SANDBOX_PORTS } from "@/lib/sandbox/config";
+import {
+  AGENT_HARNESS_BRIDGE_PORT,
+  DEFAULT_SANDBOX_PORTS,
+} from "@/lib/sandbox/config";
 import { isSandboxActive } from "@/lib/sandbox/utils";
 
 type RouteContext = {
@@ -68,7 +71,9 @@ interface PersistedDevServerTarget {
   port: number;
 }
 
-const SUPPORTED_PORTS = new Set(DEFAULT_SANDBOX_PORTS);
+const SUPPORTED_PORTS = new Set(
+  DEFAULT_SANDBOX_PORTS.filter((port) => port !== AGENT_HARNESS_BRIDGE_PORT),
+);
 const DEV_SERVER_PIDFILE_PREFIX = ".open-agents-dev-server";
 const DEV_SERVER_STATE_FILENAME = `${DEV_SERVER_PIDFILE_PREFIX}-state.json`;
 const INSTALL_COMMANDS: Record<PackageManager, string> = {
