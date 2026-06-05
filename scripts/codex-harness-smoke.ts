@@ -1,6 +1,6 @@
 /**
  * Run one Codex harness turn against an existing caller-owned Open Agents
- * sandbox. This validates bridge startup, AI Gateway auth, and detach cleanup
+ * sandbox. This validates bridge startup, AI Gateway auth, and bridge cleanup
  * without routing through the chat workflow.
  *
  * Usage:
@@ -17,6 +17,10 @@ import {
   provideSandbox,
 } from "agent-harness-experimental";
 import { connectVercelSandbox } from "@open-agents/sandbox/vercel";
+import {
+  AGENT_HARNESS_BRIDGE_PORT,
+  DEFAULT_SANDBOX_PORTS,
+} from "../apps/web/lib/sandbox/config.ts";
 
 const DEFAULT_PROMPT =
   "Reply with exactly: codex harness smoke ok. Do not call tools.";
@@ -121,13 +125,13 @@ async function main() {
   const sandbox = await connectVercelSandbox({
     sandboxName: parsed.sandboxName,
     resume: true,
-    ports: [5001],
+    ports: DEFAULT_SANDBOX_PORTS,
   });
   const backend = createVercelSandboxBackend();
   const provided = provideSandbox({
     backend,
     session: sandbox.toAgentHarnessWorkspace(),
-    bridgePorts: [5001],
+    bridgePorts: [AGENT_HARNESS_BRIDGE_PORT],
   });
   const sessionId = `codex-smoke-${randomUUID()}`;
   const agent = createAgentSession({
@@ -146,23 +150,25 @@ async function main() {
 
   try {
     const result = await agent.generate(parsed.prompt);
-    console.log(
-      JSON.stringify(
-        {
-          ok: true,
-          sandboxName: parsed.sandboxName,
-          sessionId,
-          status: result.status,
-          text: result.text,
-          pending: result.pending,
-          resumeState: agent.session.exportState(),
-        },
-        null,
-        2,
-      ),
-    );
+    const output = {
+      ok: result.finishReason !== "error",
+      sandboxName: parsed.sandboxName,
+      sessionId,
+      status: result.status,
+      finishReason: result.finishReason,
+      rawFinishReason: result.rawFinishReason,
+      text: result.text,
+      pending: result.pending,
+      resumeState: agent.session.exportState(),
+    };
+
+    console.log(JSON.stringify(output, null, 2));
+
+    if (result.finishReason === "error") {
+      throw new Error(result.rawFinishReason ?? "Codex harness turn failed.");
+    }
   } finally {
-    await agent.close("detach");
+    await agent.close("stop");
   }
 }
 
