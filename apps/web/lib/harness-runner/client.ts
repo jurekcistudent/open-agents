@@ -63,7 +63,9 @@ export async function runHarnessTurnViaApi(
             }
           : {}),
         ...(process.env.VERCEL_OIDC_TOKEN
-          ? { "x-vercel-oidc-token": process.env.VERCEL_OIDC_TOKEN }
+          ? {
+              "x-vercel-trusted-oidc-idp-token": process.env.VERCEL_OIDC_TOKEN,
+            }
           : {}),
       },
       body,

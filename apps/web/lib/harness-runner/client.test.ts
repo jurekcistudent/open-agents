@@ -4,9 +4,14 @@ import { verifyInternalHarnessRequest } from "./internal-request";
 
 const originalFetch = globalThis.fetch;
 const originalSecret = process.env.BETTER_AUTH_SECRET;
+const originalAutomationBypassSecret =
+  process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+const originalOidcToken = process.env.VERCEL_OIDC_TOKEN;
 
 beforeEach(() => {
   process.env.BETTER_AUTH_SECRET = "test-internal-harness-secret";
+  process.env.VERCEL_AUTOMATION_BYPASS_SECRET = "test-bypass-secret";
+  process.env.VERCEL_OIDC_TOKEN = "test-oidc-token";
 });
 
 afterEach(() => {
@@ -15,6 +20,17 @@ afterEach(() => {
     delete process.env.BETTER_AUTH_SECRET;
   } else {
     process.env.BETTER_AUTH_SECRET = originalSecret;
+  }
+  if (originalAutomationBypassSecret === undefined) {
+    delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  } else {
+    process.env.VERCEL_AUTOMATION_BYPASS_SECRET =
+      originalAutomationBypassSecret;
+  }
+  if (originalOidcToken === undefined) {
+    delete process.env.VERCEL_OIDC_TOKEN;
+  } else {
+    process.env.VERCEL_OIDC_TOKEN = originalOidcToken;
   }
 });
 
@@ -30,6 +46,13 @@ describe("runHarnessTurnViaApi", () => {
             headers.get("x-open-agents-harness-signature"),
           ),
         ).toBe(true);
+        expect(headers.get("x-vercel-protection-bypass")).toBe(
+          "test-bypass-secret",
+        );
+        expect(headers.get("x-vercel-trusted-oidc-idp-token")).toBe(
+          "test-oidc-token",
+        );
+        expect(headers.get("x-vercel-oidc-token")).toBeNull();
 
         return new Response(
           [
