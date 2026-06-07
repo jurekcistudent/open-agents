@@ -1,4 +1,9 @@
-import { isToolUIPart, type LanguageModelUsage, type UIMessageChunk } from "ai";
+import {
+  isToolUIPart,
+  type FinishReason,
+  type LanguageModelUsage,
+  type UIMessageChunk,
+} from "ai";
 import type { SandboxState, Sandbox } from "@open-agents/sandbox";
 import type { WebAgentUIMessage } from "@/app/types";
 import type { AutoCommitResult } from "@/lib/chat/auto-commit-direct";
@@ -492,11 +497,12 @@ export async function closeStream(
 
 export async function sendFinish(
   writable: WritableStream<UIMessageChunk>,
+  finishReason: FinishReason = "stop",
 ): Promise<void> {
   "use step";
   const writer = writable.getWriter();
   try {
-    await writer.write({ type: "finish", finishReason: "stop" });
+    await writer.write({ type: "finish", finishReason });
   } finally {
     writer.releaseLock();
   }

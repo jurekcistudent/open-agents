@@ -304,6 +304,28 @@ function getSetupErrorMessage(error: unknown): string {
   return "Workspace setup failed. Try again in a moment.";
 }
 
+function getHarnessErrorMessage(rawFinishReason: string | undefined): string {
+  if (!rawFinishReason) {
+    return "Codex failed before it could respond. Try again in a moment.";
+  }
+
+  if (rawFinishReason.includes("Cannot find package 'ws'")) {
+    return "Codex failed before it could respond because this sandbox is missing the prepared harness runtime. Recreate the sandbox and try again.";
+  }
+
+  if (
+    rawFinishReason.includes("Bridge process exited without becoming ready")
+  ) {
+    return "Codex failed before it could respond because the sandbox bridge did not start. Recreate the sandbox and try again.";
+  }
+
+  const reason =
+    rawFinishReason.length > 500
+      ? `${rawFinishReason.slice(0, 500)}...`
+      : rawFinishReason;
+  return `Codex failed before it could respond: ${reason}`;
+}
+
 function isStepTimingError(
   error: unknown,
 ): error is Error & { stepTiming: WorkflowRunStepTiming } {
@@ -787,6 +809,22 @@ export async function runAgentWorkflow(options: Options) {
       stepTimings.push(result.stepTiming);
       pendingAssistantResponse =
         result.responseMessage ?? pendingAssistantResponse;
+      if (
+        options.harnessId !== "open-agent" &&
+        result.finishReason === "error" &&
+        pendingAssistantResponse.parts.length === 0
+      ) {
+        const errorText = getHarnessErrorMessage(result.rawFinishReason);
+        pendingAssistantResponse = {
+          ...pendingAssistantResponse,
+          parts: [{ type: "text", text: errorText }],
+        };
+        await sendTextMessage(
+          writable,
+          `${assistantId}:harness-error`,
+          errorText,
+        );
+      }
       shouldRefreshCachedDiff =
         shouldRefreshCachedDiff ||
         shouldRefreshDiffCacheForParts(pendingAssistantResponse.parts);
@@ -973,7 +1011,10 @@ export async function runAgentWorkflow(options: Options) {
 
     await Promise.all([
       clearActiveStream(options.chatId, workflowRunId),
-      sendFinish(writable).then(() => closeStream(writable)),
+      sendFinish(
+        writable,
+        finalFinishReason === "error" ? "error" : "stop",
+      ).then(() => closeStream(writable)),
       ...(sandboxState && shouldRefreshCachedDiff
         ? [refreshDiffCache(options.sessionId, sandboxState)]
         : []),
@@ -982,7 +1023,7 @@ export async function runAgentWorkflow(options: Options) {
 
     workflowStatus = wasAborted
       ? "aborted"
-      : exhaustedMaxSteps
+      : exhaustedMaxSteps || finalFinishReason === "error"
         ? "failed"
         : "completed";
   } catch (error) {
@@ -1005,7 +1046,10 @@ export async function runAgentWorkflow(options: Options) {
       if (!streamClosed) {
         await Promise.all([
           clearActiveStream(options.chatId, workflowRunId),
-          sendFinish(writable).then(() => closeStream(writable)),
+          sendFinish(
+            writable,
+            workflowStatus === "failed" ? "error" : "stop",
+          ).then(() => closeStream(writable)),
         ]);
       }
     } finally {

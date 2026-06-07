@@ -12,6 +12,7 @@ type SnapshotSandboxConnector = (
 export interface EnsureVercelSnapshotTemplateOptions {
   templateName: string;
   sandboxTimeoutMs: number;
+  baseSnapshotId?: string;
   ports?: number[];
   env?: Record<string, string>;
   prepare?: (sandbox: SnapshotSandbox) => Promise<void>;
@@ -107,6 +108,9 @@ export async function ensureVercelSnapshotTemplate(
         resume: true,
         createIfMissing: true,
         skipGitWorkspaceBootstrap: true,
+        ...(options.baseSnapshotId !== undefined && {
+          baseSnapshotId: options.baseSnapshotId,
+        }),
         ...(options.ports !== undefined && { ports: options.ports }),
         ...(options.env !== undefined && { env: options.env }),
       },

@@ -79,14 +79,19 @@ const spies = {
   clearActiveStream: mock((_chatId?: unknown, _workflowRunId?: unknown) =>
     Promise.resolve(),
   ),
-  sendFinish: mock(async (writable: WritableStream<UIMessageChunk>) => {
-    const writer = writable.getWriter();
-    try {
-      await writer.write({ type: "finish", finishReason: "stop" });
-    } finally {
-      writer.releaseLock();
-    }
-  }),
+  sendFinish: mock(
+    async (
+      writable: WritableStream<UIMessageChunk>,
+      finishReason: "stop" | "error" = "stop",
+    ) => {
+      const writer = writable.getWriter();
+      try {
+        await writer.write({ type: "finish", finishReason });
+      } finally {
+        writer.releaseLock();
+      }
+    },
+  ),
   recordWorkflowUsage: mock(() => Promise.resolve()),
   refreshDiffCache: mock((_sessionId?: unknown, _sandboxState?: unknown) =>
     Promise.resolve(),
@@ -109,7 +114,21 @@ const spies = {
     async (input: {
       onChunk: (chunk: UIMessageChunk) => Promise<void> | void;
       messageId: string;
-    }) => {
+    }): Promise<{
+      responseMessage: {
+        id: string;
+        role: "assistant";
+        parts: Array<{ type: string; text?: string }>;
+        metadata: Record<string, unknown>;
+      };
+      finishReason: "stop" | "error";
+      rawFinishReason: string;
+      usage?: {
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+      };
+    }> => {
       await input.onChunk({
         type: "text-start",
         id: "harness-text",
@@ -521,6 +540,44 @@ describe("runAgentWorkflow", () => {
       expect.objectContaining({
         role: "assistant",
         parts: [{ type: "text", text: "Hello from Codex" }],
+      }),
+    );
+  });
+
+  test("surfaces Codex harness errors as visible assistant text", async () => {
+    spies.runHarnessTurn.mockImplementationOnce(
+      async (input: { messageId: string }) => ({
+        responseMessage: {
+          id: input.messageId,
+          role: "assistant" as const,
+          parts: [],
+          metadata: {},
+        },
+        finishReason: "error" as const,
+        rawFinishReason:
+          "codex: Agent execution failed. Cannot find package 'ws' imported from /tmp/bridge-ws-server.mts",
+        usage: undefined,
+      }),
+    );
+
+    await runAgentWorkflow(makeOptions({ harnessId: "codex" }));
+
+    const expectedText =
+      "Codex failed before it could respond because this sandbox is missing the prepared harness runtime. Recreate the sandbox and try again.";
+    expect(writtenChunks).toContainEqual({
+      type: "text-delta",
+      id: expect.stringContaining(":harness-error"),
+      delta: expectedText,
+    });
+    expect(writtenChunks).toContainEqual({
+      type: "finish",
+      finishReason: "error",
+    });
+    expect(spies.persistAssistantMessage).toHaveBeenCalledWith(
+      "chat-1",
+      expect.objectContaining({
+        role: "assistant",
+        parts: [{ type: "text", text: expectedText }],
       }),
     );
   });

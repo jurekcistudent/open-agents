@@ -63,6 +63,7 @@ describe("ensureVercelSnapshotTemplate", () => {
       {
         templateName: "open-agents-sbx-tpl-new",
         sandboxTimeoutMs: 300_000,
+        baseSnapshotId: "snap-base",
         ports: [3000, 5001],
         prepare,
       },
@@ -87,6 +88,7 @@ describe("ensureVercelSnapshotTemplate", () => {
           resume: true,
           createIfMissing: true,
           skipGitWorkspaceBootstrap: true,
+          baseSnapshotId: "snap-base",
           ports: [3000, 5001],
         },
       },
