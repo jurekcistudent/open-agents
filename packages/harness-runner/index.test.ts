@@ -94,8 +94,13 @@ describe("OPEN_AGENT_HARNESS_TOOLS", () => {
   test("exposes ask_user_question as an external client-side tool", () => {
     expect(Object.keys(OPEN_AGENT_HARNESS_TOOLS)).toEqual([
       "ask_user_question",
+      "todo_write",
     ]);
     expect("execute" in OPEN_AGENT_HARNESS_TOOLS.ask_user_question).toBeFalse();
+  });
+
+  test("exposes todo_write as a local progress-tracking tool", () => {
+    expect("execute" in OPEN_AGENT_HARNESS_TOOLS.todo_write).toBeTrue();
   });
 
   test("instructs Codex to use ask_user_question instead of prose fallback", () => {
@@ -107,6 +112,15 @@ describe("OPEN_AGENT_HARNESS_TOOLS", () => {
     );
     expect(OPEN_AGENT_HARNESS_INSTRUCTIONS).toContain(
       "your first assistant action must be an ask_user_question tool call",
+    );
+  });
+
+  test("instructs Codex to use todo_write for visible task tracking", () => {
+    expect(OPEN_AGENT_HARNESS_INSTRUCTIONS).toContain(
+      "The todo_write tool is available",
+    );
+    expect(OPEN_AGENT_HARNESS_INSTRUCTIONS).toContain(
+      "Only one task should be in_progress at a time",
     );
   });
 });

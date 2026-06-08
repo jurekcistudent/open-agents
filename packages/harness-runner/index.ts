@@ -70,8 +70,10 @@ export type RunHarnessTurnInput = {
 export const OPEN_AGENT_HARNESS_INSTRUCTIONS = [
   "You are running inside Open Agents.",
   "The ask_user_question tool is available in this Codex harness session.",
+  "The todo_write tool is available in this Codex harness session for visible task tracking.",
   "When you need to ask the user structured follow-up questions, call ask_user_question instead of writing the questions as plain text.",
   "If the user explicitly asks you to ask questions, your first assistant action must be an ask_user_question tool call.",
+  "For multi-step work, keep a concise task list with todo_write. Update it before starting a task and after completing a task. Only one task should be in_progress at a time.",
   "Do not say that the structured question tool is unavailable. If Codex exposes user-defined tools through MCP, use the harness-tools MCP tool. If the MCP namespace is not visible, use the custom-tool relay command shown in the prompt for ask_user_question.",
   "Put related questions in one ask_user_question call, then wait for the user's answer before continuing.",
 ].join("\n");
@@ -134,6 +136,51 @@ Users can select provided options or enter custom text.`,
         },
       },
       required: ["questions"],
+    }),
+  }),
+  todo_write: tool({
+    description: `Create and manage a structured task list for the current session.
+
+Use this for multi-step work, checklists, or when the user gives several requirements. This tool replaces the entire todo list, so always send the full updated list.
+
+Only one todo should be in_progress at a time. Mark work in_progress before starting it and completed as soon as it is done.`,
+    inputSchema: jsonSchema({
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        todos: {
+          type: "array",
+          description:
+            "The complete list of todo items. This replaces existing todos.",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              id: {
+                type: "string",
+                description: "Stable unique identifier for the todo item.",
+              },
+              content: {
+                type: "string",
+                description: "Clear, concise task description.",
+              },
+              status: {
+                type: "string",
+                enum: ["pending", "in_progress", "completed"],
+                description:
+                  "Current status. Only one task should be in_progress at a time.",
+              },
+            },
+            required: ["id", "content", "status"],
+          },
+        },
+      },
+      required: ["todos"],
+    }),
+    execute: async ({ todos }) => ({
+      success: true,
+      message: `Updated task list with ${todos.length} items`,
+      todos,
     }),
   }),
 } satisfies ToolSet;
