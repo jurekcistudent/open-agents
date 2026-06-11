@@ -45,6 +45,7 @@ import {
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import type { ChatRefreshResponse } from "@/app/api/sessions/[sessionId]/chats/[chatId]/route";
+import { normalizeAskUserQuestionInput } from "@/lib/chat/normalize-ask-user-question";
 import type { MergePullRequestResult } from "@/lib/github/actions/pr";
 import {
   getDeploymentUrl,
@@ -2608,17 +2609,18 @@ export function SessionChatContent({
     }
   }, [questionToolCallId, addToolOutput]);
 
-  // Stable empty array so the hook doesn't reset on every render when there's no question
-  const emptyQuestions = useMemo(
-    () => [] as AskUserQuestionInput["questions"],
-    [],
+  // Stable array identity so the hook doesn't reset on every render. Harness
+  // tool inputs are untyped JSON, so coerce instead of trusting the cast.
+  const pendingQuestions = useMemo(
+    () =>
+      hasPendingQuestion && pendingQuestionPart
+        ? normalizeAskUserQuestionInput(pendingQuestionPart.input)
+        : ([] as AskUserQuestionInput["questions"]),
+    [hasPendingQuestion, pendingQuestionPart],
   );
 
   const inlineQuestion = useInlineQuestion({
-    questions:
-      hasPendingQuestion && pendingQuestionPart
-        ? pendingQuestionPart.input.questions
-        : emptyQuestions,
+    questions: pendingQuestions,
     onSubmit: handleQuestionSubmit,
     onCancel: handleQuestionCancel,
     textareaValue: input,
