@@ -492,7 +492,14 @@ export async function closeStream(
   writable: WritableStream<UIMessageChunk>,
 ): Promise<void> {
   "use step";
-  await writable.close();
+  const { isStreamAlreadyCompletedError } = await import("./stream-conflict");
+  try {
+    await writable.close();
+  } catch (error) {
+    if (!isStreamAlreadyCompletedError(error)) {
+      throw error;
+    }
+  }
 }
 
 export async function sendFinish(
@@ -500,9 +507,14 @@ export async function sendFinish(
   finishReason: FinishReason = "stop",
 ): Promise<void> {
   "use step";
+  const { isStreamAlreadyCompletedError } = await import("./stream-conflict");
   const writer = writable.getWriter();
   try {
     await writer.write({ type: "finish", finishReason });
+  } catch (error) {
+    if (!isStreamAlreadyCompletedError(error)) {
+      throw error;
+    }
   } finally {
     writer.releaseLock();
   }
