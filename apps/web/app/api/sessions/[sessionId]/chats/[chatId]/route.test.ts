@@ -377,19 +377,40 @@ describe("/api/sessions/[sessionId]/chats/[chatId]", () => {
     expect(updateEmptyChatCalls).toHaveLength(0);
   });
 
-  test("PATCH rejects a harness that is not wired yet", async () => {
+  test("PATCH switches an empty chat to the claude-code harness", async () => {
+    ownedSessionChatResult = {
+      ok: true,
+      sessionRecord: { id: "session-1" },
+      chat: {
+        id: "chat-1",
+        sessionId: "session-1",
+        modelId: "model-1",
+        harnessId: "codex",
+        activeStreamId: null,
+      },
+    };
+    updatedEmptyChat = {
+      id: "chat-1",
+      sessionId: "session-1",
+      title: "Chat",
+      modelId: "model-1",
+      harnessId: "claude-code",
+    };
     const { PATCH } = await routeModulePromise;
 
     const response = await PATCH(
       createPatchRequest({ harnessId: "claude-code" }),
       createContext(),
     );
-    const body = (await response.json()) as { error: string };
 
-    expect(response.status).toBe(400);
-    expect(body.error).toBe("Harness is not available yet");
+    expect(response.status).toBe(200);
+    expect(updateEmptyChatCalls).toEqual([
+      {
+        chatId: "chat-1",
+        patch: { harnessId: "claude-code" },
+      },
+    ]);
     expect(updateChatCalls).toHaveLength(0);
-    expect(updateEmptyChatCalls).toHaveLength(0);
   });
 
   test("PATCH updates an empty chat harness atomically with other fields", async () => {

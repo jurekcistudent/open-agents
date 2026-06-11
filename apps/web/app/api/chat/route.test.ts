@@ -21,7 +21,7 @@ interface TestSessionRecord {
 interface TestChatRecord {
   sessionId: string;
   modelId: string | null;
-  harnessId: "open-agent" | "codex" | "claude-code";
+  harnessId: string;
   activeStreamId: string | null;
 }
 
@@ -335,11 +335,11 @@ describe("/api/chat route", () => {
     expect(createChatMessageIfNotExistsSpy).not.toHaveBeenCalled();
   });
 
-  test("returns 400 for a harness that is not wired yet", async () => {
+  test("returns 400 for a harness that is not available", async () => {
     if (!chatRecord) {
       throw new Error("chatRecord must be set");
     }
-    chatRecord.harnessId = "claude-code";
+    chatRecord.harnessId = "unknown-harness";
     const { POST } = await routeModulePromise;
 
     const response = await POST(createValidRequest());

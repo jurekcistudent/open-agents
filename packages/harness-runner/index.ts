@@ -1,4 +1,3 @@
-import { codex } from "@agent-harness-experimental/adapter-codex";
 import { createVercelSandboxBackend } from "@agent-harness-experimental/sandbox-vercel";
 import type { AgentHarnessHostedWorkspace } from "@open-agents/sandbox/vercel";
 import {
@@ -7,8 +6,18 @@ import {
   provideSandbox,
 } from "agent-harness-experimental";
 import { jsonSchema, readUIMessageStream, tool, type ToolSet } from "ai";
+import { createHarnessAdapter, type ExternalHarnessId } from "./adapters";
+import { HARNESS_INSTRUCTIONS } from "./instructions";
 
-export type ExternalHarnessId = "codex";
+export {
+  createHarnessAdapter,
+  EXTERNAL_HARNESS_IDS,
+  type ExternalHarnessId,
+  isExternalHarnessId,
+  resolveClaudeCodeModelId,
+  resolveCodexModelId,
+} from "./adapters";
+export { HARNESS_INSTRUCTIONS } from "./instructions";
 
 export type HarnessUIMessage = {
   id: string;
@@ -66,17 +75,6 @@ export type RunHarnessTurnInput = {
   abortSignal?: AbortSignal;
   onChunk: (chunk: HarnessUIMessageChunk) => Promise<void> | void;
 };
-
-export const OPEN_AGENT_HARNESS_INSTRUCTIONS = [
-  "You are running inside Open Agents.",
-  "The ask_user_question tool is available in this Codex harness session.",
-  "The todo_write tool is available in this Codex harness session for visible task tracking.",
-  "When you need to ask the user structured follow-up questions, call ask_user_question instead of writing the questions as plain text.",
-  "If the user explicitly asks you to ask questions, your first assistant action must be an ask_user_question tool call.",
-  "For multi-step work, keep a concise task list with todo_write. Update it before starting a task and after completing a task. Only one task should be in_progress at a time.",
-  "Do not say that the structured question tool is unavailable. If Codex exposes user-defined tools through MCP, use the harness-tools MCP tool. If the MCP namespace is not visible, use the custom-tool relay command shown in the prompt for ask_user_question.",
-  "Put related questions in one ask_user_question call, then wait for the user's answer before continuing.",
-].join("\n");
 
 export const OPEN_AGENT_HARNESS_TOOLS = {
   ask_user_question: tool({
@@ -367,12 +365,6 @@ export function buildHarnessPrompt(messages: HarnessUIMessage[]): string {
     .join("\n\n");
 }
 
-export function resolveCodexModelId(modelId: string): string | undefined {
-  return modelId.startsWith("openai/")
-    ? modelId.slice("openai/".length)
-    : undefined;
-}
-
 function withHarnessMetadata(
   message: HarnessUIMessage,
   input: Pick<RunHarnessTurnInput, "selectedModelId" | "modelId">,
@@ -445,10 +437,8 @@ export async function runHarnessTurn(
     bridgePorts: [5001],
   });
   const agent = createAgentSession({
-    adapter: codex({
-      model: resolveCodexModelId(input.modelId),
-    }),
-    instructions: OPEN_AGENT_HARNESS_INSTRUCTIONS,
+    adapter: createHarnessAdapter(input.harnessId, input.modelId),
+    instructions: HARNESS_INSTRUCTIONS[input.harnessId],
     tools: OPEN_AGENT_HARNESS_TOOLS,
     sessionId: input.sessionId,
     sandbox: {

@@ -10,6 +10,7 @@ import {
 } from "ai";
 import type { OpenAgentCallOptions } from "@open-agents/agent";
 import type {
+  ExternalHarnessId,
   HarnessUIMessage,
   HarnessUsage,
 } from "@open-agents/harness-runner";
@@ -53,7 +54,7 @@ import {
 } from "@/lib/model-access";
 import { getAllVariants } from "@/lib/model-variants";
 import { APP_DEFAULT_MODEL_ID } from "@/lib/models";
-import type { ChatHarnessId } from "@/lib/chat-harnesses";
+import { type ChatHarnessId, getChatHarnessLabel } from "@/lib/chat-harnesses";
 import type { Session as AuthSession } from "@/lib/session/types";
 import type {
   WorkflowRunStatus,
@@ -305,6 +306,7 @@ function getSetupErrorMessage(error: unknown): string {
 }
 
 function getHarnessErrorMessage(
+  harnessLabel: string,
   rawFinishReason: string | undefined,
   hasPartialResponse = false,
 ): string {
@@ -313,31 +315,31 @@ function getHarnessErrorMessage(
     : "before it could respond";
 
   if (!rawFinishReason) {
-    return `Codex failed ${timing}. Try again in a moment.`;
+    return `${harnessLabel} failed ${timing}. Try again in a moment.`;
   }
 
   if (rawFinishReason.includes("Cannot find package 'ws'")) {
-    return `Codex failed ${timing} because this sandbox is missing the prepared harness runtime. Recreate the sandbox and try again.`;
+    return `${harnessLabel} failed ${timing} because this sandbox is missing the prepared harness runtime. Recreate the sandbox and try again.`;
   }
 
   if (
     rawFinishReason.includes("Authentication failed") &&
     rawFinishReason.includes("AI_GATEWAY_API_KEY")
   ) {
-    return `Codex failed ${timing} because AI Gateway rejected the configured credentials. Check AI_GATEWAY_API_KEY or Vercel OIDC for this deployment and try again.`;
+    return `${harnessLabel} failed ${timing} because AI Gateway rejected the configured credentials. Check AI_GATEWAY_API_KEY or Vercel OIDC for this deployment and try again.`;
   }
 
   if (
     rawFinishReason.includes("Bridge process exited without becoming ready")
   ) {
-    return `Codex failed ${timing} because the sandbox bridge did not start. Recreate the sandbox and try again.`;
+    return `${harnessLabel} failed ${timing} because the sandbox bridge did not start. Recreate the sandbox and try again.`;
   }
 
   const reason =
     rawFinishReason.length > 500
       ? `${rawFinishReason.slice(0, 500)}...`
       : rawFinishReason;
-  return `Codex failed ${timing}: ${reason}`;
+  return `${harnessLabel} failed ${timing}: ${reason}`;
 }
 
 function isStepTimingError(
@@ -650,10 +652,6 @@ export async function runAgentWorkflow(options: Options) {
     throw new Error("runAgentWorkflow requires at least one message");
   }
 
-  if (options.harnessId === "claude-code") {
-    throw new Error(`Harness "${options.harnessId}" is not wired yet`);
-  }
-
   const assistantId =
     latestMessage.role === "assistant"
       ? latestMessage.id
@@ -799,6 +797,7 @@ export async function runAgentWorkflow(options: Options) {
                 step + 1,
               )
             : await runHarnessAgentStep(
+                options.harnessId,
                 options.messages,
                 originalMessagesForStep,
                 assistantId,
@@ -829,6 +828,7 @@ export async function runAgentWorkflow(options: Options) {
       ) {
         const hasPartialResponse = pendingAssistantResponse.parts.length > 0;
         const errorText = getHarnessErrorMessage(
+          getChatHarnessLabel(options.harnessId),
           result.rawFinishReason,
           hasPartialResponse,
         );
@@ -1124,6 +1124,7 @@ function toLanguageModelUsage(
 }
 
 const runHarnessAgentStep = async (
+  harnessId: ExternalHarnessId,
   messages: WebAgentUIMessage[],
   originalMessages: WebAgentUIMessage[],
   messageId: string,
@@ -1148,10 +1149,10 @@ const runHarnessAgentStep = async (
     const { runHarnessTurnViaApi } =
       await import("@/lib/harness-runner/client");
     const result = await runHarnessTurnViaApi({
-      harnessId: "codex",
+      harnessId,
       sandboxState,
       workingDirectory,
-      sessionId: `codex-${chatId}-${messageId}`.slice(0, 128),
+      sessionId: `${harnessId}-${chatId}-${messageId}`.slice(0, 128),
       messageId,
       messages: messages as HarnessUIMessage[],
       originalMessages: originalMessages as HarnessUIMessage[],

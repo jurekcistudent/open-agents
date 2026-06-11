@@ -27,10 +27,14 @@ export const CHAT_HARNESS_OPTIONS: ChatHarnessOption[] = [
   {
     id: "claude-code",
     label: "Claude Code",
-    description: "Claude Code bridge runtime is not wired yet",
-    available: false,
+    description: "Claude Code native coding agent",
+    available: true,
   },
 ];
+
+export function getChatHarnessLabel(id: ChatHarnessId): string {
+  return CHAT_HARNESS_OPTIONS.find((option) => option.id === id)?.label ?? id;
+}
 
 export function isChatHarnessId(value: unknown): value is ChatHarnessId {
   return (

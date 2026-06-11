@@ -35,6 +35,8 @@ mock.module("@open-agents/sandbox", () => ({
 }));
 
 mock.module("@open-agents/harness-runner", () => ({
+  isExternalHarnessId: (value: unknown) =>
+    value === "codex" || value === "claude-code",
   runHarnessTurn: spies.runHarnessTurn,
 }));
 
@@ -70,19 +72,25 @@ const body = JSON.stringify({
   modelId: "openai/gpt-5.4",
 });
 
-function createRequest(signed: boolean) {
+function createRequest(signed: boolean, requestBody = body) {
   return new Request(
     "https://preview.example.com/api/internal/harness-runner",
     {
       method: "POST",
       headers: signed
         ? {
-            "x-open-agents-harness-signature": signInternalHarnessRequest(body),
+            "x-open-agents-harness-signature":
+              signInternalHarnessRequest(requestBody),
           }
         : undefined,
-      body,
+      body: requestBody,
     },
   );
+}
+
+function createRequestWithHarnessId(harnessId: string) {
+  const parsedBody = JSON.parse(body) as Record<string, unknown>;
+  return createRequest(true, JSON.stringify({ ...parsedBody, harnessId }));
 }
 
 describe("/api/internal/harness-runner", () => {
@@ -91,6 +99,26 @@ describe("/api/internal/harness-runner", () => {
 
     expect(response.status).toBe(401);
     expect(spies.connectSandbox).not.toHaveBeenCalled();
+  });
+
+  test("rejects a non-external harness id", async () => {
+    const response = await POST(createRequestWithHarnessId("open-agent"));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Invalid harness",
+    });
+    expect(spies.connectSandbox).not.toHaveBeenCalled();
+  });
+
+  test("accepts the claude-code harness", async () => {
+    const response = await POST(createRequestWithHarnessId("claude-code"));
+
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(spies.runHarnessTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ harnessId: "claude-code" }),
+    );
   });
 
   test("streams runner chunks and the final result", async () => {

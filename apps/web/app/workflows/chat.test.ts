@@ -505,14 +505,18 @@ describe("runAgentWorkflow", () => {
     }
   });
 
-  test("rejects an unimplemented harness before side effects", async () => {
-    await expect(
-      runAgentWorkflow(makeOptions({ harnessId: "claude-code" })),
-    ).rejects.toThrow('Harness "claude-code" is not wired yet');
+  test("runs Claude Code through the isolated harness runner", async () => {
+    await runAgentWorkflow(makeOptions({ harnessId: "claude-code" }));
 
-    expect(spies.claimActiveStream).not.toHaveBeenCalled();
-    expect(spies.resolveChatSandboxRuntime).not.toHaveBeenCalled();
-    expect(spies.persistAssistantMessage).not.toHaveBeenCalled();
+    expect(spies.runHarnessTurn).toHaveBeenCalledTimes(1);
+    expect(spies.runHarnessTurn.mock.calls[0]?.[0]).toMatchObject({
+      harnessId: "claude-code",
+      sandboxState: {
+        type: "vercel",
+        sandboxName: "session_session-1",
+      },
+      workingDirectory: "/vercel/sandbox",
+    });
   });
 
   test("runs Codex through the isolated harness runner", async () => {

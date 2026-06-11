@@ -10,10 +10,12 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: join(appDir, "../.."),
   outputFileTracingIncludes: {
     "/api/internal/harness-runner": [
+      "../../node_modules/.pnpm/@agent-harness-experimental+adapter-claude-code@*/node_modules/@agent-harness-experimental/adapter-claude-code/dist/**/*",
       "../../node_modules/.pnpm/@agent-harness-experimental+adapter-codex@*/node_modules/@agent-harness-experimental/adapter-codex/dist/**/*",
     ],
   },
   serverExternalPackages: [
+    "@agent-harness-experimental/adapter-claude-code",
     "@agent-harness-experimental/adapter-codex",
     "@agent-harness-experimental/sandbox-vercel",
     "agent-harness-experimental",

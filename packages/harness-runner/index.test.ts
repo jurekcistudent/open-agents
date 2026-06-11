@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
-  OPEN_AGENT_HARNESS_INSTRUCTIONS,
+  EXTERNAL_HARNESS_IDS,
+  HARNESS_INSTRUCTIONS,
   OPEN_AGENT_HARNESS_TOOLS,
   assembleHarnessResponseMessage,
   buildHarnessPrompt,
+  isExternalHarnessId,
   mapOpenAgentToolChunk,
+  resolveClaudeCodeModelId,
   resolveCodexModelId,
 } from "./index";
 
@@ -90,6 +93,32 @@ describe("resolveCodexModelId", () => {
   });
 });
 
+describe("resolveClaudeCodeModelId", () => {
+  test("passes Anthropic models to Claude Code without the gateway provider prefix", () => {
+    expect(resolveClaudeCodeModelId("anthropic/claude-opus-4.6")).toBe(
+      "claude-opus-4.6",
+    );
+  });
+
+  test("uses the Claude Code default for models from another provider", () => {
+    expect(resolveClaudeCodeModelId("openai/gpt-5.4")).toBeUndefined();
+  });
+});
+
+describe("isExternalHarnessId", () => {
+  test("accepts every external harness id", () => {
+    for (const harnessId of EXTERNAL_HARNESS_IDS) {
+      expect(isExternalHarnessId(harnessId)).toBeTrue();
+    }
+  });
+
+  test("rejects the open-agent loop and unknown values", () => {
+    expect(isExternalHarnessId("open-agent")).toBeFalse();
+    expect(isExternalHarnessId("goose")).toBeFalse();
+    expect(isExternalHarnessId(undefined)).toBeFalse();
+  });
+});
+
 describe("OPEN_AGENT_HARNESS_TOOLS", () => {
   test("exposes ask_user_question as an external client-side tool", () => {
     expect(Object.keys(OPEN_AGENT_HARNESS_TOOLS)).toEqual([
@@ -103,24 +132,39 @@ describe("OPEN_AGENT_HARNESS_TOOLS", () => {
     expect("execute" in OPEN_AGENT_HARNESS_TOOLS.todo_write).toBeTrue();
   });
 
-  test("instructs Codex to use ask_user_question instead of prose fallback", () => {
-    expect(OPEN_AGENT_HARNESS_INSTRUCTIONS).toContain(
-      "The ask_user_question tool is available",
-    );
-    expect(OPEN_AGENT_HARNESS_INSTRUCTIONS).toContain(
+  test.each([...EXTERNAL_HARNESS_IDS])(
+    "instructs %s to use ask_user_question instead of prose fallback",
+    (harnessId) => {
+      expect(HARNESS_INSTRUCTIONS[harnessId]).toContain(
+        "The ask_user_question tool is available",
+      );
+      expect(HARNESS_INSTRUCTIONS[harnessId]).toContain(
+        "your first assistant action must be an ask_user_question tool call",
+      );
+    },
+  );
+
+  test.each([...EXTERNAL_HARNESS_IDS])(
+    "instructs %s to use todo_write for visible task tracking",
+    (harnessId) => {
+      expect(HARNESS_INSTRUCTIONS[harnessId]).toContain(
+        "The todo_write tool is available",
+      );
+      expect(HARNESS_INSTRUCTIONS[harnessId]).toContain(
+        "Only one task should be in_progress at a time",
+      );
+    },
+  );
+
+  test("keeps the Codex MCP relay fallback guidance", () => {
+    expect(HARNESS_INSTRUCTIONS.codex).toContain(
       "Do not say that the structured question tool is unavailable",
-    );
-    expect(OPEN_AGENT_HARNESS_INSTRUCTIONS).toContain(
-      "your first assistant action must be an ask_user_question tool call",
     );
   });
 
-  test("instructs Codex to use todo_write for visible task tracking", () => {
-    expect(OPEN_AGENT_HARNESS_INSTRUCTIONS).toContain(
-      "The todo_write tool is available",
-    );
-    expect(OPEN_AGENT_HARNESS_INSTRUCTIONS).toContain(
-      "Only one task should be in_progress at a time",
+  test("steers Claude Code away from its built-in TodoWrite tool", () => {
+    expect(HARNESS_INSTRUCTIONS["claude-code"]).toContain(
+      "instead of your built-in TodoWrite tool",
     );
   });
 });

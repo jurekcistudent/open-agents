@@ -3,7 +3,10 @@ import type {
   Sandbox,
 } from "@open-agents/sandbox";
 import { connectSandbox } from "@open-agents/sandbox";
-import { runHarnessTurn } from "@open-agents/harness-runner";
+import {
+  isExternalHarnessId,
+  runHarnessTurn,
+} from "@open-agents/harness-runner";
 import {
   INTERNAL_HARNESS_SIGNATURE_HEADER,
   verifyInternalHarnessRequest,
@@ -50,7 +53,7 @@ export async function POST(request: Request) {
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
-  if (input.harnessId !== "codex") {
+  if (!isExternalHarnessId(input.harnessId)) {
     return Response.json({ error: "Invalid harness" }, { status: 400 });
   }
 

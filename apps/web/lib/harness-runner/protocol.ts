@@ -1,4 +1,5 @@
 import type {
+  ExternalHarnessId,
   HarnessTurnResult,
   HarnessUIMessage,
   HarnessUIMessageChunk,
@@ -6,7 +7,7 @@ import type {
 import type { SandboxState } from "@open-agents/sandbox";
 
 export type InternalHarnessRunRequest = {
-  harnessId: "codex";
+  harnessId: ExternalHarnessId;
   sandboxState: SandboxState;
   workingDirectory: string;
   sessionId: string;
