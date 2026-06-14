@@ -1,8 +1,5 @@
-import {
-  type Command,
-  type NetworkPolicy,
-  Sandbox as VercelSandboxSDK,
-} from "@vercel/sandbox";
+import { createVercelSandbox } from "@ai-sdk/sandbox-vercel";
+import { Sandbox as VercelSandboxSDK } from "@vercel/sandbox";
 import type { Dirent } from "fs";
 import type {
   ExecResult,
@@ -25,55 +22,24 @@ const MAX_SDK_TIMEOUT_MS = 18_000_000; // Vercel API limit: 5 hours
 const MAX_PROACTIVE_TIMEOUT_MS = MAX_SDK_TIMEOUT_MS - TIMEOUT_BUFFER_MS;
 const DEFAULT_RECONNECT_TIMEOUT_MS = 300_000; // 5 minutes default timeout for reconnected sandboxes
 const DETACHED_QUICK_FAILURE_WINDOW_MS = 2_000;
+const HARNESS_WORKING_DIRECTORY = "/tmp/open-agents-harness";
 
-export interface AgentHarnessCommandSpec {
-  cmd: string;
-  args?: string[];
-  cwd?: string;
-  env?: Record<string, string>;
-  sudo?: boolean;
-  signal?: AbortSignal;
-  timeoutMs?: number;
-}
+export type AiSdkHarnessSandboxProvider = ReturnType<
+  typeof createVercelSandbox
+>;
+type AiSdkHarnessSandboxSession = Awaited<
+  ReturnType<AiSdkHarnessSandboxProvider["createSession"]>
+>;
 
-export interface AgentHarnessExecResult {
-  stdout: string;
-  stderr: string;
-  exitCode: number | null;
-}
-
-export interface AgentHarnessProcess {
-  logs(): AsyncIterable<{ stream: "stdout" | "stderr"; data: string }>;
-  wait(): Promise<AgentHarnessExecResult>;
-  kill(): Promise<void>;
-}
-
-export interface AgentHarnessNetworkPolicy {
-  mode: "allow-all" | "deny-all" | "custom";
-  allowedHosts?: string[];
-  allowedCIDRs?: string[];
-  deniedCIDRs?: string[];
-  injectedHeaders?: Array<{
-    domain: string;
-    headers: Record<string, string>;
-  }>;
-}
-
-export interface AgentHarnessHostedWorkspace {
-  readonly name: string;
-  exec(spec: AgentHarnessCommandSpec): Promise<AgentHarnessExecResult>;
-  spawn(spec: AgentHarnessCommandSpec): Promise<AgentHarnessProcess>;
-  writeFiles(
-    files: Array<{ path: string; content: string | Uint8Array }>,
-    opts?: { signal?: AbortSignal },
-  ): Promise<void>;
-  readFileToBuffer(options: { path: string }): Promise<Buffer | null>;
-  getPortUrl(port: number, protocol?: "http" | "ws"): Promise<string>;
-  updateNetworkPolicy(
-    policy: AgentHarnessNetworkPolicy | undefined,
-  ): Promise<void>;
-  stop(): Promise<void>;
-  delete(): Promise<void>;
+function withHarnessWorkingDirectory(
+  session: AiSdkHarnessSandboxSession,
+): AiSdkHarnessSandboxSession {
+  return Object.create(session, {
+    defaultWorkingDirectory: {
+      value: HARNESS_WORKING_DIRECTORY,
+      enumerable: true,
+    },
+  }) as AiSdkHarnessSandboxSession;
 }
 
 interface SandboxRouteLike {
@@ -117,83 +83,6 @@ function buildDefaultCredentialBrokeringPolicy(): SandboxNetworkPolicy {
         : {}),
       "*": [],
     },
-  };
-}
-
-function toAgentHarnessNetworkPolicy(
-  policy: AgentHarnessNetworkPolicy | undefined,
-): NetworkPolicy | undefined {
-  if (!policy) {
-    return undefined;
-  }
-
-  if (policy.mode === "deny-all") {
-    return policy.mode;
-  }
-
-  const allow: Record<
-    string,
-    Array<{ transform?: Array<{ headers?: Record<string, string> }> }>
-  > = {};
-
-  if (policy.mode === "allow-all") {
-    allow["*"] = [];
-  }
-
-  for (const host of policy.allowedHosts ?? []) {
-    allow[host] = [];
-  }
-
-  for (const rule of policy.injectedHeaders ?? []) {
-    allow[rule.domain] ??= [];
-    allow[rule.domain]?.push({
-      transform: [{ headers: { ...rule.headers } }],
-    });
-  }
-
-  if (
-    policy.mode === "allow-all" &&
-    Object.keys(allow).length === 1 &&
-    allow["*"]?.length === 0 &&
-    !policy.allowedCIDRs?.length &&
-    !policy.deniedCIDRs?.length
-  ) {
-    return "allow-all";
-  }
-
-  return {
-    ...(Object.keys(allow).length > 0 ? { allow } : {}),
-    ...((policy.allowedCIDRs?.length ?? 0) > 0 ||
-    (policy.deniedCIDRs?.length ?? 0) > 0
-      ? {
-          subnets: {
-            ...(policy.allowedCIDRs?.length
-              ? { allow: [...policy.allowedCIDRs] }
-              : {}),
-            ...(policy.deniedCIDRs?.length
-              ? { deny: [...policy.deniedCIDRs] }
-              : {}),
-          },
-        }
-      : {}),
-  };
-}
-
-function toAgentHarnessCommandParams(
-  spec: AgentHarnessCommandSpec,
-  detached?: boolean,
-) {
-  const { timeoutMs: _timeoutMs, ...params } = spec;
-  return detached ? { ...params, detached: true as const } : params;
-}
-
-async function toAgentHarnessExecResult(
-  command: Pick<Command, "stdout" | "stderr" | "exitCode">,
-): Promise<AgentHarnessExecResult> {
-  return {
-    stdout: await command.stdout(),
-    stderr: await command.stderr(),
-    exitCode: command.exitCode,
   };
 }
 
@@ -1173,72 +1062,30 @@ ${hostLine}${portLines}${runtimeEnvLine}`;
   }
 
   /**
-   * Adapt this caller-owned sandbox for agent-harness-sdk provided mode.
-   * The harness may detach its bridge processes, but Open Agents retains
-   * lifecycle ownership of the underlying sandbox.
+   * Adapt this caller-owned sandbox for AI SDK harnesses. The returned
+   * provider never stops or deletes the underlying VM.
    */
-  toAgentHarnessWorkspace(): AgentHarnessHostedWorkspace {
+  toHarnessSandboxProvider(
+    bridgePorts: ReadonlyArray<number> = [],
+  ): AiSdkHarnessSandboxProvider {
+    const provider = createVercelSandbox({
+      sandbox: this.sdk,
+      ...(bridgePorts.length > 0 ? { bridgePorts } : {}),
+    });
+    const resumeSession = provider.resumeSession;
+
     return {
-      name: this.name,
-      exec: async (spec) => {
-        return await toAgentHarnessExecResult(
-          await this.session.runCommand(toAgentHarnessCommandParams(spec)),
-        );
-      },
-      spawn: async (spec) => {
-        const command = await this.session.runCommand(
-          toAgentHarnessCommandParams(spec, true),
-        );
-        return {
-          async *logs() {
-            for await (const entry of command.logs()) {
-              yield entry;
-            }
-          },
-          async wait() {
-            return await toAgentHarnessExecResult(await command.wait());
-          },
-          async kill() {
-            await command.kill();
-          },
-        };
-      },
-      writeFiles: async (files, opts) => {
-        await this.session.writeFiles(
-          files.map((file) => ({
-            path: file.path,
-            content: Buffer.from(file.content),
-          })),
-          opts,
-        );
-      },
-      readFileToBuffer: async (options) => {
-        return await this.session.readFileToBuffer(options);
-      },
-      getPortUrl: async (port, protocol = "http") => {
-        const url = new URL(this.session.domain(port));
-        url.protocol =
-          protocol === "ws"
-            ? url.protocol === "https:"
-              ? "wss:"
-              : "ws:"
-            : url.protocol === "wss:" || url.protocol === "https:"
-              ? "https:"
-              : "http:";
-        return url.toString();
-      },
-      updateNetworkPolicy: async (policy) => {
-        const networkPolicy = toAgentHarnessNetworkPolicy(policy);
-        if (networkPolicy) {
-          await this.sdk.updateNetworkPolicy(networkPolicy);
-        }
-      },
-      stop: async () => {
-        await this.stop();
-      },
-      delete: async () => {
-        await this.sdk.delete();
-      },
+      specificationVersion: provider.specificationVersion,
+      providerId: provider.providerId,
+      bridgePorts: provider.bridgePorts,
+      createSession: async (options) =>
+        withHarnessWorkingDirectory(await provider.createSession(options)),
+      ...(resumeSession
+        ? {
+            resumeSession: async (options) =>
+              withHarnessWorkingDirectory(await resumeSession(options)),
+          }
+        : {}),
     };
   }
 

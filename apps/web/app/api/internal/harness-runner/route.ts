@@ -1,5 +1,5 @@
 import type {
-  AgentHarnessHostedWorkspace,
+  AiSdkHarnessSandboxProvider,
   Sandbox,
 } from "@open-agents/sandbox";
 import { connectSandbox } from "@open-agents/sandbox";
@@ -20,15 +20,17 @@ import { DEFAULT_SANDBOX_PORTS } from "@/lib/sandbox/config";
 export const maxDuration = 800;
 
 type HarnessCapableSandbox = Sandbox & {
-  toAgentHarnessWorkspace(): AgentHarnessHostedWorkspace;
+  toHarnessSandboxProvider(
+    bridgePorts?: ReadonlyArray<number>,
+  ): AiSdkHarnessSandboxProvider;
 };
 
 function isHarnessCapableSandbox(
   sandbox: Sandbox,
 ): sandbox is HarnessCapableSandbox {
   return (
-    "toAgentHarnessWorkspace" in sandbox &&
-    typeof sandbox.toAgentHarnessWorkspace === "function"
+    "toHarnessSandboxProvider" in sandbox &&
+    typeof sandbox.toHarnessSandboxProvider === "function"
   );
 }
 
@@ -81,7 +83,7 @@ export async function POST(request: Request) {
 
           const result = await runHarnessTurn({
             harnessId: input.harnessId,
-            workspace: sandbox.toAgentHarnessWorkspace(),
+            sandboxProvider: sandbox.toHarnessSandboxProvider([5001]),
             workingDirectory: input.workingDirectory,
             sessionId: input.sessionId,
             messageId: input.messageId,

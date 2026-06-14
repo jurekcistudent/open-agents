@@ -10,15 +10,15 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: join(appDir, "../.."),
   outputFileTracingIncludes: {
     "/api/internal/harness-runner": [
-      "../../node_modules/.pnpm/@agent-harness-experimental+adapter-claude-code@*/node_modules/@agent-harness-experimental/adapter-claude-code/dist/**/*",
-      "../../node_modules/.pnpm/@agent-harness-experimental+adapter-codex@*/node_modules/@agent-harness-experimental/adapter-codex/dist/**/*",
+      "../../node_modules/.pnpm/@ai-sdk+harness-claude-code@*/node_modules/@ai-sdk/harness-claude-code/dist/bridge/**/*",
+      "../../node_modules/.pnpm/@ai-sdk+harness-codex@*/node_modules/@ai-sdk/harness-codex/dist/bridge/**/*",
     ],
   },
   serverExternalPackages: [
-    "@agent-harness-experimental/adapter-claude-code",
-    "@agent-harness-experimental/adapter-codex",
-    "@agent-harness-experimental/sandbox-vercel",
-    "agent-harness-experimental",
+    "@ai-sdk/harness",
+    "@ai-sdk/harness-claude-code",
+    "@ai-sdk/harness-codex",
+    "@ai-sdk/sandbox-vercel",
   ],
   images: {
     remotePatterns: [

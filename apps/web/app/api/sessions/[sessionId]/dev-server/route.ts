@@ -6,7 +6,6 @@ import {
 } from "@/app/api/sessions/_lib/session-context";
 import {
   AGENT_HARNESS_BRIDGE_PORT,
-  AGENT_HARNESS_PROXY_PORT,
   DEFAULT_SANDBOX_PORTS,
 } from "@/lib/sandbox/config";
 import { isSandboxActive } from "@/lib/sandbox/utils";
@@ -73,10 +72,7 @@ interface PersistedDevServerTarget {
 }
 
 const SUPPORTED_PORTS = new Set(
-  DEFAULT_SANDBOX_PORTS.filter(
-    (port) =>
-      port !== AGENT_HARNESS_PROXY_PORT && port !== AGENT_HARNESS_BRIDGE_PORT,
-  ),
+  DEFAULT_SANDBOX_PORTS.filter((port) => port !== AGENT_HARNESS_BRIDGE_PORT),
 );
 const DEV_SERVER_PIDFILE_PREFIX = ".open-agents-dev-server";
 const DEV_SERVER_STATE_FILENAME = `${DEV_SERVER_PIDFILE_PREFIX}-state.json`;

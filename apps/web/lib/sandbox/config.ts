@@ -41,21 +41,18 @@ export const SANDBOX_LIFECYCLE_MIN_SLEEP_MS = 5 * 1000;
 
 /**
  * Default ports to expose from cloud sandboxes.
- * Limited to 5 ports. Covers the most common framework defaults,
+ * Covers the most common framework defaults,
  * the built-in code editor, and the external harness runtime:
  * - 3000: Next.js, Express, Remix
  * - 5173: Vite, SvelteKit
  * - 8000: code-server (built-in editor)
- * - 5000: external harness proxy
  * - 5001: external harness bridge
  */
-export const AGENT_HARNESS_PROXY_PORT = 5000;
 export const AGENT_HARNESS_BRIDGE_PORT = 5001;
 export const DEFAULT_SANDBOX_PORTS = [
   3000,
   5173,
   8000,
-  AGENT_HARNESS_PROXY_PORT,
   AGENT_HARNESS_BRIDGE_PORT,
 ];
 export const CODE_SERVER_PORT = 8000;

@@ -10,9 +10,11 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { ensureGatewayApiKeyEnv } from "agent-harness-experimental";
 import { connectVercelSandbox } from "@open-agents/sandbox/vercel";
-import { runHarnessTurn } from "../packages/harness-runner/index.ts";
+import {
+  ensureGatewayApiKeyEnv,
+  runHarnessTurn,
+} from "../packages/harness-runner/index.ts";
 import { DEFAULT_SANDBOX_PORTS } from "../apps/web/lib/sandbox/config.ts";
 
 const DEFAULT_PROMPT =
@@ -128,7 +130,7 @@ async function main() {
     : "openai/gpt-5.4";
   const result = await runHarnessTurn({
     harnessId: "codex",
-    workspace: sandbox.toAgentHarnessWorkspace(),
+    sandboxProvider: sandbox.toHarnessSandboxProvider([5001]),
     workingDirectory: sandbox.workingDirectory,
     sessionId,
     messageId,

@@ -5,11 +5,35 @@ import {
   OPEN_AGENT_HARNESS_TOOLS,
   assembleHarnessResponseMessage,
   buildHarnessPrompt,
+  extractHarnessCostUsd,
   isExternalHarnessId,
   mapOpenAgentToolChunk,
   resolveClaudeCodeModelId,
   resolveCodexModelId,
 } from "./index";
+
+describe("extractHarnessCostUsd", () => {
+  test("reads cumulative Claude Code cost metadata", () => {
+    expect(
+      extractHarnessCostUsd({
+        "claude-code": {
+          costUsd: 0.0123,
+        },
+      }),
+    ).toBe(0.0123);
+  });
+
+  test("ignores missing or invalid cost metadata", () => {
+    expect(extractHarnessCostUsd(undefined)).toBeUndefined();
+    expect(
+      extractHarnessCostUsd({
+        "claude-code": {
+          costUsd: "0.0123",
+        },
+      }),
+    ).toBeUndefined();
+  });
+});
 
 describe("buildHarnessPrompt", () => {
   test("builds a compact transcript from chat text", () => {

@@ -1,4 +1,4 @@
-import type { ExternalHarnessId } from "./adapters";
+import type { ExternalHarnessId } from "./adapters.ts";
 
 const CODEX_HARNESS_INSTRUCTIONS = [
   "You are running inside Open Agents.",

@@ -43,11 +43,7 @@ export {
 export {
   connectVercelSandbox,
   VercelSandbox,
-  type AgentHarnessCommandSpec,
-  type AgentHarnessExecResult,
-  type AgentHarnessHostedWorkspace,
-  type AgentHarnessNetworkPolicy,
-  type AgentHarnessProcess,
+  type AiSdkHarnessSandboxProvider,
   type VercelSandboxConfig,
   type VercelSandboxConnectConfig,
   type VercelState,

@@ -1,13 +1,16 @@
-import { createVercelSandboxBackend } from "@agent-harness-experimental/sandbox-vercel";
-import type { AgentHarnessHostedWorkspace } from "@open-agents/sandbox/vercel";
+import { HarnessAgent } from "@ai-sdk/harness/agent";
+import type { AiSdkHarnessSandboxProvider } from "@open-agents/sandbox/vercel";
 import {
-  createAgentSession,
-  ensureGatewayApiKeyEnv,
-  provideSandbox,
-} from "agent-harness-experimental";
-import { jsonSchema, readUIMessageStream, tool, type ToolSet } from "ai";
-import { createHarnessAdapter, type ExternalHarnessId } from "./adapters";
-import { HARNESS_INSTRUCTIONS } from "./instructions";
+  jsonSchema,
+  readUIMessageStream,
+  tool,
+  type LanguageModelUsage,
+  type ToolSet,
+} from "ai";
+import { createHarnessAdapter, type ExternalHarnessId } from "./adapters.ts";
+import { ensureGatewayApiKeyEnv } from "./auth.ts";
+import { HARNESS_INSTRUCTIONS } from "./instructions.ts";
+import { linkHarnessWorkingDirectory } from "./workspace.ts";
 
 export {
   createHarnessAdapter,
@@ -16,8 +19,10 @@ export {
   isExternalHarnessId,
   resolveClaudeCodeModelId,
   resolveCodexModelId,
-} from "./adapters";
-export { HARNESS_INSTRUCTIONS } from "./instructions";
+} from "./adapters.ts";
+export { HARNESS_INSTRUCTIONS } from "./instructions.ts";
+export { ensureGatewayApiKeyEnv, resolveGatewayApiKey } from "./auth.ts";
+export { prepareHarnessSandboxRuntimeProfile } from "./prewarm.ts";
 
 export type HarnessUIMessage = {
   id: string;
@@ -64,7 +69,7 @@ export type HarnessTurnResult = {
 
 export type RunHarnessTurnInput = {
   harnessId: ExternalHarnessId;
-  workspace: AgentHarnessHostedWorkspace;
+  sandboxProvider: AiSdkHarnessSandboxProvider;
   workingDirectory: string;
   sessionId: string;
   messageId: string;
@@ -398,6 +403,47 @@ function withHarnessMetadata(
   };
 }
 
+export function extractHarnessCostUsd(metadata: unknown): number | undefined {
+  if (typeof metadata !== "object" || metadata === null) {
+    return;
+  }
+
+  const claudeCode = (metadata as Record<string, unknown>)["claude-code"];
+  if (typeof claudeCode !== "object" || claudeCode === null) {
+    return;
+  }
+
+  const costUsd = (claudeCode as Record<string, unknown>).costUsd;
+  return typeof costUsd === "number" && Number.isFinite(costUsd)
+    ? costUsd
+    : undefined;
+}
+
+function toHarnessUsage(
+  usage: LanguageModelUsage,
+  providerMetadata: unknown,
+): HarnessUsage {
+  const costUsd = extractHarnessCostUsd(providerMetadata);
+
+  return {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    totalTokens: usage.totalTokens,
+    cachedInputTokens: usage.inputTokenDetails.cacheReadTokens,
+    reasoningTokens: usage.outputTokenDetails.reasoningTokens,
+    inputTokenDetails: {
+      noCacheTokens: usage.inputTokenDetails.noCacheTokens,
+      cacheReadTokens: usage.inputTokenDetails.cacheReadTokens,
+      cacheWriteTokens: usage.inputTokenDetails.cacheWriteTokens,
+    },
+    outputTokenDetails: {
+      textTokens: usage.outputTokenDetails.textTokens,
+      reasoningTokens: usage.outputTokenDetails.reasoningTokens,
+    },
+    ...(costUsd !== undefined ? { costUsd } : {}),
+  };
+}
+
 export async function assembleHarnessResponseMessage(
   stream: ReadableStream<HarnessUIMessageChunk>,
   messageId: string,
@@ -430,30 +476,29 @@ export async function runHarnessTurn(
 
   await ensureGatewayApiKeyEnv();
 
-  const backend = createVercelSandboxBackend();
-  const provided = provideSandbox({
-    backend,
-    session: input.workspace,
-    bridgePorts: [5001],
-  });
-  const agent = createAgentSession({
-    adapter: createHarnessAdapter(input.harnessId, input.modelId),
+  const agent = new HarnessAgent({
+    harness: createHarnessAdapter(input.harnessId, input.modelId),
     instructions: HARNESS_INSTRUCTIONS[input.harnessId],
     tools: OPEN_AGENT_HARNESS_TOOLS,
-    sessionId: input.sessionId,
-    sandbox: {
-      mode: "provided",
-      provided,
-      runtimeSetup: "refresh",
-      workingDirectory: {
-        kind: "path",
-        path: input.workingDirectory,
-      },
+    permissionMode: "allow-all",
+    sandbox: input.sandboxProvider,
+    onSandboxSession: async ({ session, sessionWorkDir, abortSignal }) => {
+      await linkHarnessWorkingDirectory({
+        session,
+        sessionWorkDir,
+        workingDirectory: input.workingDirectory,
+        abortSignal,
+      });
     },
+  });
+  const session = await agent.createSession({
+    sessionId: input.sessionId,
+    ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
   });
 
   try {
     const stream = await agent.stream({
+      session,
       prompt,
       ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
     });
@@ -480,13 +525,20 @@ export async function runHarnessTurn(
       await input.onChunk(value as HarnessUIMessageChunk);
     }
 
-    const [responseMessage, finishReason, rawFinishReason, usage] =
-      await Promise.all([
-        responseMessagePromise,
-        stream.finishReason,
-        stream.rawFinishReason,
-        stream.totalUsage,
-      ]);
+    const [
+      responseMessage,
+      finishReason,
+      rawFinishReason,
+      totalUsage,
+      providerMetadata,
+    ] = await Promise.all([
+      responseMessagePromise,
+      stream.finishReason,
+      stream.rawFinishReason,
+      stream.totalUsage,
+      stream.providerMetadata,
+    ]);
+    const usage = toHarnessUsage(totalUsage, providerMetadata);
     const result = {
       finishReason,
       rawFinishReason,
@@ -508,6 +560,6 @@ export async function runHarnessTurn(
       responseMessage: enrichedResponseMessage,
     };
   } finally {
-    await agent.close("stop");
+    await session.destroy();
   }
 }

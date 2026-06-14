@@ -11,12 +11,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@agent-harness-experimental/adapter-claude-code": "0.0.5",
-    "@agent-harness-experimental/adapter-codex": "0.0.5",
-    "@agent-harness-experimental/sandbox-vercel": "0.0.5",
+    "@ai-sdk/harness": "1.0.0-canary.10",
+    "@ai-sdk/harness-claude-code": "1.0.0-canary.6",
+    "@ai-sdk/harness-codex": "1.0.0-canary.6",
     "@open-agents/sandbox": "workspace:*",
-    "agent-harness-experimental": "0.0.5",
-    "ai": "7.0.0-canary.126"
+    "@vercel/oidc": "^2.0.2",
+    "ai": "7.0.0-canary.174"
   },
   "devDependencies": {
     "@open-agents/tsconfig": "workspace:*",

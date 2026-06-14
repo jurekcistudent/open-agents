@@ -2,11 +2,14 @@ import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { signInternalHarnessRequest } from "@/lib/harness-runner/internal-request";
 
 const originalSecret = process.env.BETTER_AUTH_SECRET;
-const workspace = { name: "harness-workspace" };
+const sandboxProvider = {
+  specificationVersion: "harness-sandbox-v1",
+  providerId: "vercel-sandbox",
+};
 
 const spies = {
   connectSandbox: mock(async () => ({
-    toAgentHarnessWorkspace: () => workspace,
+    toHarnessSandboxProvider: () => sandboxProvider,
   })),
   runHarnessTurn: mock(
     async (input: {
@@ -131,12 +134,12 @@ describe("/api/internal/harness-runner", () => {
     expect(response.status).toBe(200);
     expect(spies.connectSandbox).toHaveBeenCalledWith(
       { type: "vercel", sandboxName: "session-1" },
-      { ports: [3000, 5173, 8000, 5000, 5001] },
+      { ports: [3000, 5173, 8000, 5001] },
     );
     expect(spies.runHarnessTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         harnessId: "codex",
-        workspace,
+        sandboxProvider,
         workingDirectory: "/vercel/sandbox",
       }),
     );

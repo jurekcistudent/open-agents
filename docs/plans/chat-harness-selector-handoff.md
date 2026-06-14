@@ -1,5 +1,10 @@
 # Chat Harness Selector Handoff
 
+> Superseded on June 14, 2026. The runtime now uses `@ai-sdk/harness`,
+> `@ai-sdk/harness-codex`, `@ai-sdk/harness-claude-code`, and
+> `@ai-sdk/sandbox-vercel`. The implementation lives in
+> `packages/harness-runner` and `VercelSandbox.toHarnessSandboxProvider()`.
+
 Status: foundational selector, sandbox attachment, and base-snapshot preparation
 hook work complete. Runtime dispatch is intentionally incomplete. Do not enable
 Codex or Claude Code yet.
