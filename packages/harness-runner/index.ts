@@ -260,6 +260,26 @@ function createOpenAgentToolMappingStream(): TransformStream<
   });
 }
 
+export function createHarnessStepBoundaryStream(): TransformStream<
+  HarnessUIMessageChunk,
+  HarnessUIMessageChunk
+> {
+  let isFirstChunk = true;
+
+  return new TransformStream({
+    transform(chunk, controller) {
+      if (isFirstChunk) {
+        isFirstChunk = false;
+        if (chunk.type !== "start-step") {
+          controller.enqueue({ type: "start-step" });
+        }
+      }
+
+      controller.enqueue(chunk);
+    },
+  });
+}
+
 function stringifyCompact(value: unknown): string {
   const serialized = JSON.stringify(value) ?? String(value);
   return serialized.length > 2_000
@@ -535,6 +555,7 @@ export async function runHarnessTurn(
         sendFinish: false,
       })
       .pipeThrough(createOpenAgentToolMappingStream())
+      .pipeThrough(createHarnessStepBoundaryStream())
       .tee();
     const responseMessagePromise = assembleHarnessResponseMessage(
       responseStream as ReadableStream<HarnessUIMessageChunk>,

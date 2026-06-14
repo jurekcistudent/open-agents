@@ -5,12 +5,23 @@ import {
   OPEN_AGENT_HARNESS_TOOLS,
   assembleHarnessResponseMessage,
   buildHarnessPrompt,
+  createHarnessStepBoundaryStream,
   extractHarnessCostUsd,
   isExternalHarnessId,
   mapOpenAgentToolChunk,
   resolveClaudeCodeModelId,
   resolveCodexModelId,
 } from "./index";
+
+async function readChunks(
+  stream: ReadableStream<Record<string, unknown>>,
+): Promise<Record<string, unknown>[]> {
+  const chunks: Record<string, unknown>[] = [];
+  for await (const chunk of stream) {
+    chunks.push(chunk);
+  }
+  return chunks;
+}
 
 describe("extractHarnessCostUsd", () => {
   test("reads cumulative Claude Code cost metadata", () => {
@@ -303,6 +314,41 @@ describe("assembleHarnessResponseMessage", () => {
           ],
         },
       }),
+    ]);
+  });
+});
+
+describe("createHarnessStepBoundaryStream", () => {
+  test("prepends a missing step boundary", async () => {
+    const chunks = await readChunks(
+      new ReadableStream<Record<string, unknown>>({
+        start(controller) {
+          controller.enqueue({ type: "text-start", id: "text-1" });
+          controller.close();
+        },
+      }).pipeThrough(createHarnessStepBoundaryStream()),
+    );
+
+    expect(chunks).toEqual([
+      { type: "start-step" },
+      { type: "text-start", id: "text-1" },
+    ]);
+  });
+
+  test("does not duplicate an existing step boundary", async () => {
+    const chunks = await readChunks(
+      new ReadableStream<Record<string, unknown>>({
+        start(controller) {
+          controller.enqueue({ type: "start-step" });
+          controller.enqueue({ type: "text-start", id: "text-1" });
+          controller.close();
+        },
+      }).pipeThrough(createHarnessStepBoundaryStream()),
+    );
+
+    expect(chunks).toEqual([
+      { type: "start-step" },
+      { type: "text-start", id: "text-1" },
     ]);
   });
 });
