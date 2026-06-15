@@ -448,8 +448,13 @@ type MessageUsageTotals = {
 };
 
 function getCachedInputTokens(usage: LanguageModelUsage | undefined): number {
+  const legacyCachedInputTokens = (
+    usage as unknown as Record<string, unknown> | undefined
+  )?.cachedInputTokens;
+
   return (
-    usage?.inputTokenDetails?.cacheReadTokens ?? usage?.cachedInputTokens ?? 0
+    usage?.inputTokenDetails?.cacheReadTokens ??
+    (typeof legacyCachedInputTokens === "number" ? legacyCachedInputTokens : 0)
   );
 }
 

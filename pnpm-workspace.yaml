@@ -3,10 +3,10 @@ packages:
   - "packages/*"
 
 catalog:
-  ai: ^6.0.165
-  "@ai-sdk/anthropic": ^3.0.70
-  "@ai-sdk/openai": ^3.0.53
-  "@ai-sdk/react": ^3.0.167
+  ai: 7.0.0-canary.174
+  "@ai-sdk/anthropic": 4.0.0-canary.66
+  "@ai-sdk/openai": 4.0.0-canary.73
+  "@ai-sdk/react": 4.0.0-canary.178
   zod: ^4.3.6
 
 overrides:
@@ -28,6 +28,8 @@ allowBuilds:
   sharp: true
 
 minimumReleaseAgeExclude:
+  - "@ai-sdk/anthropic@4.0.0-canary.66"
+  - "@ai-sdk/elevenlabs@3.0.0-canary.49"
   - "@ai-sdk/gateway@4.0.0-canary.106"
   - "@ai-sdk/harness@1.0.0-canary.10"
   - "@ai-sdk/harness-claude-code@1.0.0-canary.6"
@@ -35,5 +37,7 @@ minimumReleaseAgeExclude:
   - "@ai-sdk/harness-pi@1.0.0-canary.6"
   - "@ai-sdk/provider@4.0.0-canary.18"
   - "@ai-sdk/provider-utils@5.0.0-canary.48"
+  - "@ai-sdk/openai@4.0.0-canary.73"
+  - "@ai-sdk/react@4.0.0-canary.178"
   - "@ai-sdk/sandbox-vercel@1.0.0-canary.10"
   - ai@7.0.0-canary.174

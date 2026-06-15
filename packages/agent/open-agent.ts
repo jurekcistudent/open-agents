@@ -1,5 +1,5 @@
 import type { SandboxState } from "@open-agents/sandbox";
-import { stepCountIs, ToolLoopAgent, type ToolSet } from "ai";
+import { isStepCount, ToolLoopAgent, type ToolSet } from "ai";
 import { z } from "zod";
 import { addCacheControl } from "./context-management";
 import {
@@ -10,6 +10,7 @@ import {
 
 import type { SkillMetadata } from "./skills/types";
 import { buildSystemPrompt } from "./system-prompt";
+import type { AgentContext } from "./types";
 import {
   askUserQuestionTool,
   bashTool,
@@ -76,11 +77,26 @@ const tools = {
   web_fetch: webFetchTool,
 } satisfies ToolSet;
 
+// AI SDK 7 requires contextual tools to have an initial context map. Every
+// actual call replaces these placeholders in prepareCall before tool execution.
+const initialAgentContext = {} as AgentContext;
+
 export const openAgent = new ToolLoopAgent({
   model: defaultModel,
   instructions: buildSystemPrompt({}),
   tools,
-  stopWhen: stepCountIs(1),
+  toolsContext: {
+    read: initialAgentContext,
+    write: initialAgentContext,
+    edit: initialAgentContext,
+    grep: initialAgentContext,
+    glob: initialAgentContext,
+    bash: initialAgentContext,
+    task: initialAgentContext,
+    skill: initialAgentContext,
+    web_fetch: initialAgentContext,
+  },
+  stopWhen: isStepCount(1),
   callOptionsSchema,
   prepareStep: ({ messages, model, steps: _steps }) => {
     return {
@@ -114,6 +130,12 @@ export const openAgent = new ToolLoopAgent({
     const customInstructions = options.customInstructions;
     const sandbox = options.sandbox;
     const skills = options.skills ?? [];
+    const agentContext = {
+      sandbox,
+      skills,
+      model: callModel,
+      subagentModel,
+    };
 
     const instructions = buildSystemPrompt({
       cwd: sandbox.workingDirectory,
@@ -132,11 +154,16 @@ export const openAgent = new ToolLoopAgent({
         model: callModel,
       }),
       instructions,
-      experimental_context: {
-        sandbox,
-        skills,
-        model: callModel,
-        subagentModel,
+      toolsContext: {
+        read: agentContext,
+        write: agentContext,
+        edit: agentContext,
+        grep: agentContext,
+        glob: agentContext,
+        bash: agentContext,
+        task: agentContext,
+        skill: agentContext,
+        web_fetch: agentContext,
       },
     };
   },

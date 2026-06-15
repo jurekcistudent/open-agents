@@ -1118,8 +1118,6 @@ function toLanguageModelUsage(
       reasoningTokens: usage?.outputTokenDetails?.reasoningTokens,
     },
     totalTokens: usage?.totalTokens,
-    reasoningTokens: usage?.reasoningTokens,
-    cachedInputTokens: usage?.cachedInputTokens,
   };
 }
 
